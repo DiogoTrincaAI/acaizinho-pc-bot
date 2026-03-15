@@ -254,13 +254,33 @@ def start_bot():
     except Exception as e:
         logger.error(f"Erro ao iniciar bot: {e}")
 
+def start_flask():
+    """Inicia o servidor Flask em thread separada"""
+    logger.info(f"🌐 Servidor web iniciando na porta {PORT}")
+    app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
+
 if __name__ == "__main__":
     init_db()
     
-    # Iniciar bot em thread separada
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
+    # Iniciar servidor web em thread separada
+    flask_thread = threading.Thread(target=start_flask, daemon=True)
+    flask_thread.start()
     
-    # Iniciar servidor web
-    logger.info(f"🌐 Servidor web iniciando na porta {PORT}")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    # Iniciar bot na thread principal (necessário para asyncio/set_wakeup_fd)
+    if TELEGRAM_TOKEN and OPENAI_API_KEY:
+        import sys
+        sys.path.insert(0, os.path.dirname(__file__))
+        import bot as telegram_bot
+        telegram_bot.TELEGRAM_TOKEN = TELEGRAM_TOKEN
+        telegram_bot.OPENAI_API_KEY = OPENAI_API_KEY
+        telegram_bot.DB_PATH = DB_PATH
+        telegram_bot.client = telegram_bot.AsyncOpenAI(api_key=OPENAI_API_KEY, base_url="https://api.openai.com/v1")
+        telegram_bot.migrar_banco()
+        logger.info("🤖 Iniciando bot Telegram na thread principal...")
+        telegram_bot.main()
+    else:
+        logger.warning("⚠️ TELEGRAM_TOKEN ou OPENAI_API_KEY não configurados. Bot não iniciado.")
+        # Manter processo vivo
+        import time
+        while True:
+            time.sleep(60)
