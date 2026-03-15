@@ -11,9 +11,6 @@ import sqlite3
 import asyncio
 import tempfile
 import logging
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date
 from pathlib import Path
 
@@ -27,7 +24,7 @@ from openai import AsyncOpenAI
 # ==================== CONFIGURAÇÃO ====================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-DB_PATH = os.environ.get("DB_PATH", "/home/ubuntu/acaizinho_pc_v2/prestacoes.db")
+DB_PATH = os.environ.get("DB_PATH", "/app/data/prestacoes.db")
 
 # IDs Telegram autorizados (qualquer um pode usar por enquanto)
 AUTHORIZED_USERS = []  # Vazio = todos autorizados
@@ -404,16 +401,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
     chat_id = str(update.effective_chat.id)
     
-    # Aguardando destino para nova viagem?
-    if context.user_data.get("aguardando_destino"):
-        context.user_data.pop("aguardando_destino")
-        motivo = context.user_data.pop("motivo_pendente", "VIAGEM DE NEGÓCIOS")
-        destino = texto.strip().upper()
-        # Criar viagem com o destino informado
-        dados_ia = {"destino": destino, "motivo": motivo}
-        await abrir_viagem_direto(update, context, None, dados_ia)
-        return
-
     # Aguardando nova viagem?
     if context.user_data.get("aguardando_nova_viagem"):
         context.user_data.pop("aguardando_nova_viagem")
@@ -599,15 +586,7 @@ async def processar_dados_ia(update, context, dados, chat_id):
             await update.message.reply_text("❌ Nenhuma viagem encontrada. Use /nova para iniciar.")
     
     elif acao == "ajuda":
-        # Se a IA retornou uma mensagem_usuario (ex: gasolina), mostrá-la diretamente
-        mensagem_ia = dados.get("mensagem_usuario", "").strip()
-        if mensagem_ia:
-            await update.message.reply_text(
-                f"⚠️ {mensagem_ia}",
-                parse_mode="Markdown"
-            )
-        else:
-            await cmd_ajuda(update, context)
+        await cmd_ajuda(update, context)
     
     else:
         # Tentar como despesa direta
@@ -649,33 +628,18 @@ async def abrir_viagem_direto(update, context, texto_livre=None, dados_ia=None):
             context.user_data["nova_viagem_pendente"] = texto_livre
         return
     
-    # Extrair destino e motivo — tratar None em todos os campos
+    # Extrair destino e motivo
     if dados_ia:
-        destino_raw = dados_ia.get("destino") or ""
-        motivo_raw  = dados_ia.get("motivo")  or ""
-        destino = destino_raw.strip().upper()
-        motivo  = motivo_raw.strip().upper()  or "VIAGEM DE NEGÓCIOS"
+        destino = dados_ia.get("destino", "").upper() or "NÃO INFORMADO"
+        motivo = dados_ia.get("motivo", "").upper() or "VIAGEM DE NEGÓCIOS"
     elif texto_livre:
         # Usar IA para extrair
         dados = await interpretar_mensagem(f"Abrir viagem: {texto_livre}")
-        destino_raw = dados.get("destino") or ""
-        motivo_raw  = dados.get("motivo")  or ""
-        destino = destino_raw.strip().upper()
-        motivo  = motivo_raw.strip().upper()  or "VIAGEM DE NEGÓCIOS"
+        destino = (dados.get("destino") or texto_livre.upper()).upper()
+        motivo = (dados.get("motivo") or "VIAGEM DE NEGÓCIOS").upper()
     else:
-        destino = ""
-        motivo  = "VIAGEM DE NEGÓCIOS"
-
-    # Se destino não foi informado, perguntar antes de criar
-    if not destino:
-        context.user_data["aguardando_destino"] = True
-        context.user_data["motivo_pendente"] = motivo
-        await update.message.reply_text(
-            "📍 Para qual cidade/destino é essa viagem?\n\n"
-            "_Ex: São Paulo SP, Belo Horizonte MG, Curitiba PR..._",
-            parse_mode="Markdown"
-        )
-        return
+        destino = "NÃO INFORMADO"
+        motivo = "VIAGEM DE NEGÓCIOS"
     
     numero = gerar_numero()
     hoje = date.today().isoformat()
@@ -934,107 +898,93 @@ async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento):
     
     return msg
 
-def fmt_brl_email(val):
-    val = float(val or 0)
-    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def fmt_data_email(d):
-    if not d: return "—"
-    try:
-        parts = str(d).split("-")
-        if len(parts) == 3:
-            return f"{parts[2]}/{parts[1]}/{parts[0]}"
-    except:
-        pass
-    return str(d)
-
 async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
-    """Envia email via SMTP direto do Gmail"""
+    """Envia email de relatório via SMTP (Gmail)"""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    
     try:
+        smtp_email = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
+        smtp_password = os.environ.get("SMTP_PASSWORD", "")
+        email_to = os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
+        email_cc = os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
+        
+        if not smtp_password:
+            logger.error("SMTP_PASSWORD não configurado")
+            return
+        
         v = dict(viagem)
         t = totais
         
-        # Credenciais SMTP (via variáveis de ambiente)
-        EMAIL_REMETENTE = os.environ.get('SMTP_EMAIL', '')
-        SENHA_APP = os.environ.get('SMTP_PASSWORD', '')
+        assunto = f"✅ Prestação de Contas {v.get('numero_prestacao', '')} — {v.get('destino', '')} | {fmt_brl(t.get('total', 0))}"
         
-        # Montar corpo HTML do email
-        linhas_despesas = ""
+        # Montar linhas HTML da tabela de despesas
+        linhas = ""
         if t.get("cafe_manha", 0) > 0:
-            linhas_despesas += f"<tr><td>Cafe da Manha</td><td>{int(t['cafe_dias'])}x</td><td>R$ 30,00</td><td><b>{fmt_brl_email(t['cafe_manha'])}</b></td></tr>"
+            linhas += f"<tr><td>☕ Café da Manhã</td><td>{int(t['cafe_dias'])}×</td><td>R$ 30,00</td><td>{fmt_brl(t['cafe_manha'])}</td></tr>"
         if t.get("almoco", 0) > 0:
-            linhas_despesas += f"<tr><td>Almoco</td><td>{int(t['almoco_dias'])}x</td><td>R$ 60,00</td><td><b>{fmt_brl_email(t['almoco'])}</b></td></tr>"
+            linhas += f"<tr><td>🍽️ Almoço</td><td>{int(t['almoco_dias'])}×</td><td>R$ 60,00</td><td>{fmt_brl(t['almoco'])}</td></tr>"
         if t.get("jantar", 0) > 0:
-            linhas_despesas += f"<tr><td>Jantar</td><td>{int(t['jantar_dias'])}x</td><td>R$ 90,00</td><td><b>{fmt_brl_email(t['jantar'])}</b></td></tr>"
+            linhas += f"<tr><td>🌙 Jantar</td><td>{int(t['jantar_dias'])}×</td><td>R$ 90,00</td><td>{fmt_brl(t['jantar'])}</td></tr>"
         if t.get("hospedagem", 0) > 0:
-            linhas_despesas += f"<tr><td>Hospedagem</td><td>{int(t['hospedagem_noites'])} noite(s)</td><td>R$ 500,00/noite</td><td><b>{fmt_brl_email(t['hospedagem'])}</b></td></tr>"
+            linhas += f"<tr><td>🏨 Hospedagem</td><td>{int(t['hospedagem_noites'])} noite(s)</td><td>R$ 500,00</td><td>{fmt_brl(t['hospedagem'])}</td></tr>"
         if t.get("km", 0) > 0:
-            linhas_despesas += f"<tr><td>Quilometragem</td><td>{int(t['km_rodados'])} km</td><td>R$ 1,60/km</td><td><b>{fmt_brl_email(t['km'])}</b></td></tr>"
+            linhas += f"<tr><td>🚗 Quilometragem</td><td>{int(t['km_rodados'])} km</td><td>R$ 1,60/km</td><td>{fmt_brl(t['km'])}</td></tr>"
         if t.get("extras", 0) > 0:
-            linhas_despesas += f"<tr><td>Extras</td><td>-</td><td>-</td><td><b>{fmt_brl_email(t['extras'])}</b></td></tr>"
+            linhas += f"<tr><td>📎 Extras</td><td>—</td><td>—</td><td>{fmt_brl(t['extras'])}</td></tr>"
         
-        assunto = f"Prestacao de Contas {v['numero_prestacao']} - {v['destino']} | {fmt_brl_email(t['total'])}"
+        html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset='utf-8'></head>
+<body style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9f9f9; padding: 20px;'>
+  <div style='background: linear-gradient(135deg, #4B0082, #6A0DAD); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;'>
+    <h1 style='color: white; margin: 0; font-size: 24px;'>🍇 Açaizinho O Original</h1>
+    <p style='color: #E0C0FF; margin: 5px 0 0;'>Sistema de Prestação de Contas</p>
+  </div>
+  <div style='background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+    <h2 style='color: #4B0082; border-bottom: 2px solid #4B0082; padding-bottom: 10px;'>Prestação de Contas #{v.get('numero_prestacao', '')}</h2>
+    <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+      <tr><td style='padding: 8px; color: #666;'><strong>Solicitante:</strong></td><td style='padding: 8px;'>{v.get('solicitante', 'Diogo Machado')}</td></tr>
+      <tr style='background: #f5f5f5;'><td style='padding: 8px; color: #666;'><strong>Cargo:</strong></td><td style='padding: 8px;'>{v.get('cargo', 'Diretoria / Executivo')}</td></tr>
+      <tr><td style='padding: 8px; color: #666;'><strong>Destino:</strong></td><td style='padding: 8px;'>{v.get('destino', '')}</td></tr>
+      <tr style='background: #f5f5f5;'><td style='padding: 8px; color: #666;'><strong>Motivo:</strong></td><td style='padding: 8px;'>{v.get('motivo', '')}</td></tr>
+      <tr><td style='padding: 8px; color: #666;'><strong>Período:</strong></td><td style='padding: 8px;'>{fmt_data(v.get('data_inicio', ''))} → {fmt_data(v.get('data_fim', ''))}</td></tr>
+    </table>
+    <h3 style='color: #4B0082;'>Despesas Detalhadas (Política Diretoria)</h3>
+    <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+      <thead><tr style='background: #4B0082; color: white;'><th style='padding: 10px; text-align: left;'>Categoria</th><th style='padding: 10px;'>Qtd</th><th style='padding: 10px;'>Valor Unit.</th><th style='padding: 10px;'>Total</th></tr></thead>
+      <tbody>{linhas}</tbody>
+    </table>
+    <div style='background: #4B0082; color: white; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;'>
+      <strong style='font-size: 18px;'>TOTAL A REEMBOLSAR: {fmt_brl(t.get('total', 0))}</strong>
+    </div>
+    <div style='background: #f0e6ff; padding: 15px; border-radius: 8px; border-left: 4px solid #4B0082;'>
+      <h4 style='color: #4B0082; margin: 0 0 10px;'>💳 Dados para Pagamento via PIX</h4>
+      <p style='margin: 5px 0;'><strong>Chave PIX:</strong> 063.291.156-56</p>
+      <p style='margin: 5px 0;'><strong>Titular:</strong> Diogo Machado Santos</p>
+      <p style='margin: 5px 0;'><strong>Banco:</strong> Nubank</p>
+      <p style='margin: 5px 0;'><strong>Data para Pagamento:</strong> {fmt_data(data_pagamento)}</p>
+    </div>
+    <p style='color: #999; font-size: 12px; margin-top: 20px; text-align: center;'>Email gerado automaticamente pelo Sistema de Prestação de Contas — Açaizinho O Original</p>
+  </div>
+</body>
+</html>"""
         
-        corpo_html = f"""<html><body style='font-family:Arial,sans-serif;color:#1a1a1a;'>
-<div style='max-width:600px;margin:0 auto;'>
-<div style='background:#6B21A8;padding:20px;border-radius:8px 8px 0 0;'>
-<h2 style='color:white;margin:0;'>Acaizinho O Original</h2>
-<p style='color:#E9D5FF;margin:4px 0 0;'>Sistema de Prestacao de Contas</p>
-</div>
-<div style='background:#F9FAFB;padding:20px;border:1px solid #E5E7EB;'>
-<h3 style='color:#6B21A8;'>Numero: {v['numero_prestacao']}</h3>
-<table style='width:100%;border-collapse:collapse;margin-bottom:16px;'>
-<tr><td style='padding:4px 8px;color:#6B7280;'>Solicitante</td><td style='padding:4px 8px;font-weight:bold;'>{v.get('solicitante','Diogo Machado')}</td></tr>
-<tr><td style='padding:4px 8px;color:#6B7280;'>Destino</td><td style='padding:4px 8px;font-weight:bold;'>{v['destino']}</td></tr>
-<tr><td style='padding:4px 8px;color:#6B7280;'>Motivo</td><td style='padding:4px 8px;'>{v['motivo']}</td></tr>
-<tr><td style='padding:4px 8px;color:#6B7280;'>Periodo</td><td style='padding:4px 8px;'>{fmt_data_email(v['data_inicio'])} a {fmt_data_email(v.get('data_fim',''))}</td></tr>
-</table>
-<h4 style='color:#374151;border-bottom:2px solid #6B21A8;padding-bottom:8px;'>Despesas (Politica de Viagem - Diretoria)</h4>
-<table style='width:100%;border-collapse:collapse;'>
-<thead><tr style='background:#6B21A8;color:white;'><th style='padding:8px;text-align:left;'>Categoria</th><th style='padding:8px;'>Qtd</th><th style='padding:8px;'>Valor Unit.</th><th style='padding:8px;'>Total</th></tr></thead>
-<tbody>{linhas_despesas}</tbody>
-</table>
-<div style='background:#6B21A8;color:white;padding:12px;margin-top:16px;border-radius:4px;text-align:right;'>
-<span style='font-size:18px;font-weight:bold;'>TOTAL A REEMBOLSAR: {fmt_brl_email(t['total'])}</span>
-</div>
-<div style='margin-top:20px;background:#F3F4F6;padding:16px;border-radius:4px;border-left:4px solid #6B21A8;'>
-<h4 style='margin:0 0 8px;color:#6B21A8;'>Dados para Pagamento via PIX</h4>
-<p style='margin:4px 0;'><b>Chave PIX:</b> 063.291.156-56</p>
-<p style='margin:4px 0;'><b>Titular:</b> Diogo Machado Santos</p>
-<p style='margin:4px 0;'><b>Banco:</b> Nubank</p>
-<p style='margin:4px 0;'><b>Data para Pagamento:</b> {fmt_data_email(data_pagamento)}</p>
-</div>
-</div>
-<div style='background:#F3F4F6;padding:12px;border-radius:0 0 8px 8px;text-align:center;color:#9CA3AF;font-size:12px;'>
-Gerado automaticamente pelo Bot Telegram - Acaizinho O Original
-</div>
-</div>
-</body></html>"""
-        
-        # Montar mensagem
         msg = MIMEMultipart('alternative')
         msg['Subject'] = assunto
-        msg['From'] = 'Acaizinho PC Bot <' + EMAIL_REMETENTE + '>'
-        msg['To'] = 'hithiara.ferreira@acaifood.com'
-        msg['Cc'] = 'diogo.machado@acaifood.com'
-        msg.attach(MIMEText(corpo_html, 'html'))
+        msg['From'] = smtp_email
+        msg['To'] = email_to
+        msg['Cc'] = email_cc
+        msg.attach(MIMEText(html_body, 'html'))
         
-        # Enviar via SMTP em thread separada (nao bloqueia o asyncio)
-        def _send():
-            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=20)
-            server.ehlo()
-            server.starttls()
-            server.login(EMAIL_REMETENTE, SENHA_APP)
-            destinatarios = ['hithiara.ferreira@acaifood.com', 'diogo.machado@acaifood.com']
-            server.sendmail(EMAIL_REMETENTE, destinatarios, msg.as_string())
-            server.quit()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
         
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _send)
-        logger.info(f"Email enviado via SMTP para {v['numero_prestacao']}")
+        logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc})")
     except Exception as e:
-        logger.error(f"Erro ao enviar email via SMTP: {e}")
-        raise
+        logger.error(f"Erro ao enviar email: {e}")
 
 # ==================== CALLBACK BUTTONS ====================
 
@@ -1051,13 +1001,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("confirmar_fechar_"):
         viagem_id = int(data.split("_")[-1])
         await query.edit_message_text("⏳ Processando fechamento...")
-        # Criar fake update com query.message para reply_text funcionar
-        class _FakeUpdateFechar:
-            def __init__(self, msg):
-                self.message = msg
-                self.effective_chat = msg.chat
-                self.effective_message = msg
-        await executar_fechamento(_FakeUpdateFechar(query.message), context, viagem_id)
+        await executar_fechamento(update, context, viagem_id)
     
     elif data.startswith("ver_resumo_"):
         viagem_id = int(data.split("_")[-1])
@@ -1072,12 +1016,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("fechar_e_nova_"):
         viagem_id = int(data.split("_")[-1])
         await query.edit_message_text("⏳ Fechando viagem atual...")
-        class _FakeUpdateNova:
-            def __init__(self, msg):
-                self.message = msg
-                self.effective_chat = msg.chat
-                self.effective_message = msg
-        await executar_fechamento(_FakeUpdateNova(query.message), context, viagem_id)
+        await executar_fechamento(update, context, viagem_id)
         # Abrir nova viagem
         texto_pendente = context.user_data.pop("nova_viagem_pendente", None)
         if texto_pendente:
