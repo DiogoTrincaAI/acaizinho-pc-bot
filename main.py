@@ -227,12 +227,16 @@ def _calcular_totais_db(viagem_id):
 
 # ==================== INICIALIZAÇÃO ====================
 def start_bot():
-    """Inicia o bot Telegram em thread separada"""
+    """Inicia o bot Telegram em thread separada com event loop próprio"""
     if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
         logger.warning("⚠️ TELEGRAM_TOKEN ou OPENAI_API_KEY não configurados. Bot não iniciado.")
         return
     
     try:
+        # Criar novo event loop para esta thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         # Importar e iniciar bot
         import sys
         sys.path.insert(0, os.path.dirname(__file__))
