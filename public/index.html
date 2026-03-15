@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Açaizinho O Original — Prestação de Contas</title>
+<style>
+:root {
+  --rosa: #C2177A;
+  --rosa-escuro: #9A1260;
+  --rosa-claro: #FCE4F3;
+  --rosa-medio: #E91E8C;
+  --cinza: #6B7280;
+  --cinza-claro: #F9FAFB;
+  --cinza-borda: #E5E7EB;
+  --verde: #059669;
+  --verde-claro: #D1FAE5;
+  --amarelo: #D97706;
+  --amarelo-claro: #FEF3C7;
+  --azul: #1D4ED8;
+  --azul-claro: #DBEAFE;
+  --branco: #FFFFFF;
+  --texto: #111827;
+  --sombra: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --sombra-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #F3F4F6;
+  color: var(--texto);
+  min-height: 100vh;
+}
+
+/* HEADER */
+.header {
+  background: linear-gradient(135deg, var(--rosa-escuro) 0%, var(--rosa-medio) 100%);
+  color: white;
+  padding: 0 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--sombra-md);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-logo { display: flex; align-items: center; gap: 10px; }
+.header-logo img { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; }
+.header-logo-text { font-size: 16px; font-weight: 700; }
+.header-logo-sub { font-size: 11px; opacity: 0.8; }
+.header-nav { display: flex; gap: 8px; }
+.nav-btn {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: none;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.25); }
+.nav-btn.ativo { background: rgba(255,255,255,0.3); }
+
+/* CONTAINER */
+.container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+/* TELAS */
+.tela { display: none; }
+.tela.ativa { display: block; }
+
+/* CARDS */
+.card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--sombra);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--cinza-borda);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-titulo { font-size: 15px; font-weight: 600; color: var(--texto); }
+.card-body { padding: 20px; }
+
+/* DASHBOARD */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--sombra);
+  border-left: 4px solid var(--rosa);
+}
+.stat-card.verde { border-left-color: var(--verde); }
+.stat-card.amarelo { border-left-color: var(--amarelo); }
+.stat-card.azul { border-left-color: var(--azul); }
+.stat-valor { font-size: 24px; font-weight: 700; color: var(--texto); }
+.stat-label { font-size: 12px; color: var(--cinza); margin-top: 2px; }
+
+/* LISTA DE VIAGENS */
+.viagem-item {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: var(--sombra);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.1s;
+  border-left: 4px solid var(--cinza-borda);
+}
+.viagem-item:hover { box-shadow: var(--sombra-md); transform: translateY(-1px); }
+.viagem-item.em_andamento { border-left-color: var(--amarelo); }
+.viagem-item.concluida { border-left-color: var(--verde); }
+.viagem-item.enviada { border-left-color: var(--azul); }
+.viagem-row1 { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+.viagem-numero { font-size: 13px; font-weight: 700; color: var(--rosa); }
+.viagem-total { font-size: 16px; font-weight: 700; color: var(--texto); }
+.viagem-destino { font-size: 15px; font-weight: 600; color: var(--texto); }
+.viagem-motivo { font-size: 13px; color: var(--cinza); margin-top: 2px; }
+.viagem-row3 { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-amarelo { background: var(--amarelo-claro); color: var(--amarelo); }
+.badge-verde { background: var(--verde-claro); color: var(--verde); }
+.badge-azul { background: var(--azul-claro); color: var(--azul); }
+
+/* FORMULÁRIOS */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-grupo { display: flex; flex-direction: column; gap: 5px; }
+.form-grupo label { font-size: 13px; font-weight: 500; color: var(--cinza); }
+.form-grupo input, .form-grupo select, .form-grupo textarea {
+  border: 1.5px solid var(--cinza-borda);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--texto);
+  background: white;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+.form-grupo input:focus, .form-grupo select:focus, .form-grupo textarea:focus {
+  outline: none;
+  border-color: var(--rosa);
+}
+.form-grupo textarea { resize: vertical; min-height: 70px; }
+.form-full { grid-column: 1 / -1; }
+
+/* BOTÕES */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-rosa { background: var(--rosa); color: white; }
+.btn-rosa:hover { background: var(--rosa-escuro); }
+.btn-verde { background: var(--verde); color: white; }
+.btn-verde:hover { background: #047857; }
+.btn-cinza { background: var(--cinza-claro); color: var(--cinza); border: 1px solid var(--cinza-borda); }
+.btn-cinza:hover { background: var(--cinza-borda); }
+.btn-outline { background: transparent; color: var(--rosa); border: 1.5px solid var(--rosa); }
+.btn-outline:hover { background: var(--rosa-claro); }
+.btn-perigo { background: #FEE2E2; color: #DC2626; }
+.btn-perigo:hover { background: #FECACA; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.btn-lg { padding: 13px 24px; font-size: 15px; font-weight: 600; }
+.btn-block { width: 100%; justify-content: center; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ITENS DA VIAGEM */
+.tipo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.tipo-btn {
+  background: white;
+  border: 2px solid var(--cinza-borda);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tipo-btn:hover { border-color: var(--rosa); background: var(--rosa-claro); }
+.tipo-btn.selecionado { border-color: var(--rosa); background: var(--rosa-claro); }
+.tipo-btn .tipo-icone { font-size: 22px; display: block; margin-bottom: 4px; }
+.tipo-btn .tipo-nome { font-size: 12px; font-weight: 500; color: var(--texto); }
+.tipo-btn .tipo-valor { font-size: 11px; color: var(--rosa); font-weight: 600; }
+
+.item-lista { display: flex; flex-direction: column; gap: 8px; }
+.item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--cinza-claro);
+  border-radius: 8px;
+  border: 1px solid var(--cinza-borda);
+}
+.item-info { flex: 1; }
+.item-desc { font-size: 13px; font-weight: 500; color: var(--texto); }
+.item-detalhe { font-size: 12px; color: var(--cinza); margin-top: 2px; }
+.item-valor { font-size: 14px; font-weight: 700; color: var(--texto); margin: 0 12px; }
+.item-del { background: none; border: none; color: #DC2626; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 4px; }
+.item-del:hover { background: #FEE2E2; }
+
+/* RESUMO FINANCEIRO */
+.resumo-tabela { width: 100%; border-collapse: collapse; }
+.resumo-tabela tr td { padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--cinza-borda); }
+.resumo-tabela tr:last-child td { border-bottom: none; }
+.resumo-tabela .label { color: var(--cinza); }
+.resumo-tabela .valor { text-align: right; font-weight: 500; }
+.resumo-total {
+  background: linear-gradient(135deg, var(--rosa-escuro), var(--rosa-medio));
+  color: white;
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.resumo-total .label { font-size: 13px; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; }
+.resumo-total .valor { font-size: 28px; font-weight: 700; }
+
+/* PIX BOX */
+.pix-box {
+  background: linear-gradient(135deg, #1D4ED8, #3B82F6);
+  color: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.pix-titulo { font-size: 13px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.pix-chave { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+.pix-info { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+.pix-pagamento { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 13px; opacity: 0.9; }
+
+/* MODAL */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.aberto { display: flex; }
+.modal {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.modal p { font-size: 14px; color: var(--cinza); margin-bottom: 20px; }
+.modal-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* TOAST */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: #1F2937;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 999;
+  transition: transform 0.3s ease;
+  box-shadow: var(--sombra-md);
+}
+.toast.visivel { transform: translateX(-50%) translateY(0); }
+.toast.sucesso { background: var(--verde); }
+.toast.erro { background: #DC2626; }
+
+/* VAZIO */
+.vazio {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--cinza);
+}
+.vazio-icone { font-size: 48px; margin-bottom: 12px; }
+.vazio-texto { font-size: 15px; font-weight: 500; margin-bottom: 4px; color: var(--texto); }
+.vazio-sub { font-size: 13px; }
+
+/* DIVIDER */
+.divider { border: none; border-top: 1px solid var(--cinza-borda); margin: 16px 0; }
+
+/* SECAO TITULO */
+.secao-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cinza);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+/* ALERTA */
+.alerta {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.alerta-amarelo { background: var(--amarelo-claro); color: #92400E; border: 1px solid #FDE68A; }
+.alerta-verde { background: var(--verde-claro); color: #065F46; border: 1px solid #A7F3D0; }
+.alerta-azul { background: var(--azul-claro); color: #1E40AF; border: 1px solid #BFDBFE; }
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .tipo-grid { grid-template-columns: repeat(3, 1fr); }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .header-logo-sub { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-logo">
+    <div>
+      <div class="header-logo-text">🍇 AÇAIZINHO O ORIGINAL</div>
+      <div class="header-logo-sub">Sistema de Prestação de Contas</div>
+    </div>
+  </div>
+  <nav class="header-nav">
+    <button class="nav-btn ativo" onclick="mostrarTela('dashboard')" id="nav-dashboard">Início</button>
+    <button class="nav-btn" onclick="mostrarTela('nova')" id="nav-nova">+ Nova PC</button>
+    <button class="nav-btn" onclick="mostrarTela('historico')" id="nav-historico">Histórico</button>
+  </nav>
+</header>
+
+<!-- TELA: DASHBOARD -->
+<div class="tela ativa" id="tela-dashboard">
+  <div class="container">
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-valor" id="stat-total">—</div>
+        <div class="stat-label">Total de Prestações</div>
+      </div>
+      <div class="stat-card amarelo">
+        <div class="stat-valor" id="stat-andamento">—</div>
+        <div class="stat-label">Em Andamento</div>
+      </div>
+      <div class="stat-card verde">
+        <div class="stat-valor" id="stat-concluidas">—</div>
+        <div class="stat-label">Concluídas</div>
+      </div>
+      <div class="stat-card azul">
+        <div class="stat-valor" id="stat-gasto">—</div>
+        <div class="stat-label">Total Reembolsado</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-titulo">Últimas Prestações</span>
+        <button class="btn btn-rosa btn-sm" onclick="mostrarTela('nova')">+ Nova Viagem</button>
+      </div>
+      <div class="card-body" id="lista-ultimas">
+        <div class="vazio">
+          <div class="vazio-icone">✈️</div>
+          <div class="vazio-texto">Nenhuma prestação ainda</div>
+          <div class="vazio-sub">Clique em "+ Nova PC" para começar</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA: NOVA VIAGEM -->
+<div class="tela" id="tela-nova">
+  <div class="container">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-titulo">📋 Nova Prestação de Contas</span>
+      </div>
+      <div class="card-body">
+        <div class="alerta alerta-azul">
+          ℹ️ Preencha os dados iniciais da viagem. Você poderá adicionar despesas ao longo da viagem e concluir no final.
+        </div>
+        <div class="form-grid">
+          <div class="form-grupo form-full">
+            <label>Destino *</label>
+            <input type="text" id="nova-destino" placeholder="Ex: São Paulo SP" style="text-transform:uppercase">
+          </div>
+          <div class="form-grupo form-full">
+            <label>Motivo da Viagem *</label>
+            <input type="text" id="nova-motivo" placeholder="Ex: Reunião com fornecedores" style="text-transform:uppercase">
+          </div>
+          <div class="form-grupo">
+            <label>Data de Início *</label>
+            <input type="date" id="nova-data-inicio">
+          </div>
+          <div class="form-grupo">
+            <label>Data de Fim (opcional)</label>
+            <input type="date" id="nova-data-fim">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button class="btn btn-cinza" onclick="mostrarTela('dashboard')">Cancelar</button>
+          <button class="btn btn-rosa btn-lg" onclick="criarViagem()" style="flex:1;justify-content:center;">
+            🚀 Iniciar Viagem
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA: HISTÓRICO -->
+<div class="tela" id="tela-historico">
+  <div class="container">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-titulo">📚 Histórico de Prestações</span>
+        <select id="filtro-status" onchange="carregarHistorico()" style="border:1px solid var(--cinza-borda);border-radius:6px;padding:5px 10px;font-size:13px;">
+          <option value="">Todos</option>
+          <option value="em_andamento">Em Andamento</option>
+          <option value="concluida">Concluídas</option>
+        </select>
+      </div>
+      <div class="card-body" id="lista-historico">
+        <div class="vazio">
+          <div class="vazio-icone">📋</div>
+          <div class="vazio-texto">Carregando...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA: DETALHE DA VIAGEM -->
+<div class="tela" id="tela-detalhe">
+  <div class="container">
+    <!-- Cabeçalho da viagem -->
+    <div class="card" id="detalhe-cabecalho">
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-size:12px;color:var(--rosa);font-weight:700;margin-bottom:4px;" id="detalhe-numero"></div>
+            <div style="font-size:20px;font-weight:700;" id="detalhe-destino"></div>
+            <div style="font-size:14px;color:var(--cinza);margin-top:2px;" id="detalhe-motivo"></div>
+            <div style="font-size:13px;color:var(--cinza);margin-top:6px;" id="detalhe-periodo"></div>
+          </div>
+          <div id="detalhe-badge-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerta de viagem em andamento -->
+    <div class="alerta alerta-amarelo" id="alerta-andamento" style="display:none;">
+      ⏳ <strong>Viagem em andamento.</strong> Adicione as despesas conforme ocorrem. Ao finalizar a viagem, clique em "Concluir Viagem".
+    </div>
+
+    <!-- Alerta de viagem concluída -->
+    <div class="alerta alerta-verde" id="alerta-concluida" style="display:none;">
+      ✅ <strong>Viagem concluída!</strong> O email pode ser enviado para a equipe financeira.
+    </div>
+
+    <!-- Adicionar item (só para em_andamento) -->
+    <div class="card" id="card-adicionar" style="display:none;">
+      <div class="card-header">
+        <span class="card-titulo">➕ Adicionar Despesa</span>
+      </div>
+      <div class="card-body">
+        <div class="secao-titulo">Tipo de Despesa</div>
+        <div class="tipo-grid" id="tipo-grid">
+          <div class="tipo-btn" onclick="selecionarTipo('cafe_manha')">
+            <span class="tipo-icone">☕</span>
+            <span class="tipo-nome">Café da Manhã</span>
+            <span class="tipo-valor">R$ 30,00</span>
+          </div>
+          <div class="tipo-btn" onclick="selecionarTipo('almoco')">
+            <span class="tipo-icone">🍽️</span>
+            <span class="tipo-nome">Almoço</span>
+            <span class="tipo-valor">R$ 60,00</span>
+          </div>
+          <div class="tipo-btn" onclick="selecionarTipo('jantar')">
+            <span class="tipo-icone">🌙</span>
+            <span class="tipo-nome">Jantar</span>
+            <span class="tipo-valor">R$ 90,00</span>
+          </div>
+          <div class="tipo-btn" onclick="selecionarTipo('hospedagem')">
+            <span class="tipo-icone">🏨</span>
+            <span class="tipo-nome">Hospedagem</span>
+            <span class="tipo-valor">R$ 500,00</span>
+          </div>
+          <div class="tipo-btn" onclick="selecionarTipo('km')">
+            <span class="tipo-icone">🚗</span>
+            <span class="tipo-nome">Quilometragem</span>
+            <span class="tipo-valor">R$ 1,60/km</span>
+          </div>
+          <div class="tipo-btn" onclick="selecionarTipo('extra')">
+            <span class="tipo-icone">📎</span>
+            <span class="tipo-nome">Extra</span>
+            <span class="tipo-valor">Valor livre</span>
+          </div>
+        </div>
+
+        <div id="form-item" style="display:none;">
+          <hr class="divider">
+          <div class="form-grid">
+            <div class="form-grupo" id="grupo-qtd">
+              <label id="label-qtd">Quantidade</label>
+              <input type="number" id="item-qtd" min="0.1" step="0.5" value="1" placeholder="1">
+            </div>
+            <div class="form-grupo" id="grupo-valor">
+              <label id="label-valor">Valor Unitário (R$)</label>
+              <input type="number" id="item-valor" min="0" step="0.01" placeholder="0,00">
+            </div>
+            <div class="form-grupo form-full" id="grupo-desc">
+              <label>Descrição</label>
+              <input type="text" id="item-desc" placeholder="Descrição do item">
+            </div>
+            <div class="form-grupo">
+              <label>Data (opcional)</label>
+              <input type="date" id="item-data">
+            </div>
+            <div class="form-grupo" style="align-self:flex-end;">
+              <div style="font-size:12px;color:var(--cinza);margin-bottom:4px;">Total do Item</div>
+              <div style="font-size:20px;font-weight:700;color:var(--rosa);" id="item-total-preview">R$ 0,00</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button class="btn btn-cinza btn-sm" onclick="cancelarItem()">Cancelar</button>
+            <button class="btn btn-rosa" onclick="adicionarItem()" style="flex:1;justify-content:center;">✓ Adicionar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista de itens -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-titulo">📋 Despesas Lançadas</span>
+        <span id="detalhe-qtd-itens" style="font-size:13px;color:var(--cinza);">0 itens</span>
+      </div>
+      <div class="card-body" id="lista-itens">
+        <div class="vazio">
+          <div class="vazio-icone">📝</div>
+          <div class="vazio-texto">Nenhuma despesa lançada</div>
+          <div class="vazio-sub">Use o formulário acima para adicionar</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resumo financeiro -->
+    <div class="card" id="card-resumo">
+      <div class="card-header">
+        <span class="card-titulo">💰 Resumo Financeiro</span>
+      </div>
+      <div class="card-body">
+        <table class="resumo-tabela" id="resumo-tabela">
+        </table>
+        <div class="resumo-total">
+          <div class="label">Total Geral a Reembolsar</div>
+          <div class="valor" id="resumo-total-valor">R$ 0,00</div>
+        </div>
+        <!-- PIX -->
+        <div class="pix-box" id="pix-box" style="display:none;">
+          <div class="pix-titulo">💳 Dados para Pagamento via PIX</div>
+          <div class="pix-chave">063.291.156-56</div>
+          <div class="pix-info">Diogo Machado Santos — Nubank</div>
+          <div class="pix-pagamento" id="pix-pagamento-data"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="card" id="card-acoes">
+      <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+        <div id="acoes-andamento" style="display:none;">
+          <button class="btn btn-verde btn-lg btn-block" onclick="abrirModalConcluir()">
+            ✅ Concluir Viagem e Preparar Envio
+          </button>
+        </div>
+        <div id="acoes-concluida" style="display:none;">
+          <button class="btn btn-rosa btn-lg btn-block" id="btn-enviar-email" onclick="prepararEnvioEmail()">
+            📧 Enviar Prestação por Email
+          </button>
+          <div style="margin-top:8px;font-size:12px;color:var(--cinza);text-align:center;">
+            Será enviado para hithiara.ferreira@acaifood.com e diogo.machado@acaifood.com
+          </div>
+        </div>
+        <button class="btn btn-cinza btn-block" onclick="mostrarTela('historico')">
+          ← Voltar ao Histórico
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONCLUIR VIAGEM -->
+<div class="modal-overlay" id="modal-concluir">
+  <div class="modal">
+    <h3>✅ Concluir Viagem</h3>
+    <p>Preencha os dados finais para gerar a prestação de contas.</p>
+    <div class="form-grid">
+      <div class="form-grupo">
+        <label>Data de Retorno *</label>
+        <input type="date" id="concluir-data-fim">
+      </div>
+      <div class="form-grupo">
+        <label>Data de Pagamento</label>
+        <input type="date" id="concluir-data-pagamento" readonly style="background:#f5f5f5;color:var(--cinza);">
+      </div>
+      <div class="form-grupo form-full">
+        <label>Observações</label>
+        <textarea id="concluir-obs" placeholder="Informações adicionais, justificativas, etc."></textarea>
+      </div>
+    </div>
+    <div class="alerta alerta-azul" style="margin-top:12px;">
+      💳 O pagamento será solicitado para o próximo dia 15 via PIX: <strong>063.291.156-56</strong> (Nubank - Diogo Machado Santos)
+    </div>
+    <div class="modal-acoes">
+      <button class="btn btn-cinza" onclick="fecharModal('modal-concluir')">Cancelar</button>
+      <button class="btn btn-verde" onclick="concluirViagem()">✅ Confirmar Conclusão</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR EMAIL -->
+<div class="modal-overlay" id="modal-email">
+  <div class="modal">
+    <h3>📧 Enviar Prestação de Contas</h3>
+    <p>O email será enviado automaticamente com todos os detalhes.</p>
+    <div style="background:var(--rosa-claro);border-radius:8px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;color:var(--rosa);margin-bottom:6px;">📨 Destinatários:</div>
+      <div style="font-size:13px;color:var(--rosa-escuro);">hithiara.ferreira@acaifood.com</div>
+      <div style="font-size:13px;color:var(--rosa-escuro);">diogo.machado@acaifood.com</div>
+    </div>
+    <div style="background:var(--azul-claro);border-radius:8px;padding:14px;" id="modal-email-resumo">
+    </div>
+    <div class="modal-acoes">
+      <button class="btn btn-cinza" onclick="fecharModal('modal-email')">Cancelar</button>
+      <button class="btn btn-rosa" id="btn-confirmar-email" onclick="confirmarEnvioEmail()">📧 Enviar Agora</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== ESTADO ====================
+let tabela = {};
+let pix = {};
+let viagemAtualId = null;
+let tipoSelecionado = null;
+
+// ==================== INIT ====================
+async function init() {
+  try {
+    const r = await fetch('/api/tabela');
+    const d = await r.json();
+    tabela = d.tabela;
+    pix = d.pix;
+  } catch(e) {}
+  
+  // Definir data de hoje nos campos de data
+  const hoje = new Date().toISOString().split('T')[0];
+  if (document.getElementById('nova-data-inicio')) {
+    document.getElementById('nova-data-inicio').value = hoje;
+  }
+  
+  // Calcular próximo dia 15
+  const prox15 = calcularProximoDia15();
+  if (document.getElementById('concluir-data-pagamento')) {
+    document.getElementById('concluir-data-pagamento').value = prox15;
+  }
+  
+  carregarDashboard();
+}
+
+function calcularProximoDia15() {
+  const hoje = new Date();
+  let dia15 = new Date(hoje.getFullYear(), hoje.getMonth(), 15);
+  if (hoje.getDate() >= 15) {
+    dia15 = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 15);
+  }
+  return dia15.toISOString().split('T')[0];
+}
+
+// ==================== NAVEGAÇÃO ====================
+function mostrarTela(nome) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('ativo'));
+  document.getElementById('tela-' + nome).classList.add('ativa');
+  const navBtn = document.getElementById('nav-' + nome);
+  if (navBtn) navBtn.classList.add('ativo');
+  
+  if (nome === 'dashboard') carregarDashboard();
+  if (nome === 'historico') carregarHistorico();
+}
+
+// ==================== DASHBOARD ====================
+async function carregarDashboard() {
+  try {
+    const r = await fetch('/api/resumo');
+    const d = await r.json();
+    document.getElementById('stat-total').textContent = d.total_viagens;
+    document.getElementById('stat-andamento').textContent = d.em_andamento;
+    document.getElementById('stat-concluidas').textContent = d.concluidas;
+    document.getElementById('stat-gasto').textContent = formatBRL(d.total_gasto);
+    
+    const lista = document.getElementById('lista-ultimas');
+    if (!d.ultimas || d.ultimas.length === 0) {
+      lista.innerHTML = `<div class="vazio"><div class="vazio-icone">✈️</div><div class="vazio-texto">Nenhuma prestação ainda</div><div class="vazio-sub">Clique em "+ Nova PC" para começar</div></div>`;
+      return;
+    }
+    lista.innerHTML = d.ultimas.map(v => renderViagemItem(v)).join('');
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderViagemItem(v) {
+  const statusMap = {
+    em_andamento: { badge: 'badge-amarelo', label: '⏳ Em Andamento' },
+    concluida: { badge: v.email_enviado ? 'badge-azul' : 'badge-verde', label: v.email_enviado ? '📧 Email Enviado' : '✅ Concluída' }
+  };
+  const s = statusMap[v.status] || statusMap.em_andamento;
+  const periodo = v.data_inicio ? `${formatData(v.data_inicio)}${v.data_fim ? ' → ' + formatData(v.data_fim) : ' → em andamento'}` : '';
+  return `
+    <div class="viagem-item ${v.status}${v.email_enviado ? ' enviada' : ''}" onclick="abrirViagem(${v.id})">
+      <div class="viagem-row1">
+        <div class="viagem-numero">${v.numero_prestacao}</div>
+        <div class="viagem-total">${formatBRL(v.total_geral)}</div>
+      </div>
+      <div class="viagem-destino">${v.destino || '—'}</div>
+      <div class="viagem-motivo">${v.motivo || '—'}</div>
+      <div class="viagem-row3">
+        <span style="font-size:12px;color:var(--cinza);">${periodo}</span>
+        <span class="badge ${s.badge}">${s.label}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ==================== HISTÓRICO ====================
+async function carregarHistorico() {
+  const filtro = document.getElementById('filtro-status')?.value || '';
+  try {
+    const r = await fetch('/api/viagens');
+    const d = await r.json();
+    let viagens = d.viagens;
+    if (filtro) viagens = viagens.filter(v => v.status === filtro);
+    
+    const lista = document.getElementById('lista-historico');
+    if (!viagens.length) {
+      lista.innerHTML = `<div class="vazio"><div class="vazio-icone">📋</div><div class="vazio-texto">Nenhuma prestação encontrada</div></div>`;
+      return;
+    }
+    lista.innerHTML = viagens.map(v => renderViagemItem(v)).join('');
+  } catch(e) {}
+}
+
+// ==================== CRIAR VIAGEM ====================
+async function criarViagem() {
+  const destino = document.getElementById('nova-destino').value.trim();
+  const motivo = document.getElementById('nova-motivo').value.trim();
+  const dataInicio = document.getElementById('nova-data-inicio').value;
+  const dataFim = document.getElementById('nova-data-fim').value;
+  
+  if (!destino || !motivo || !dataInicio) {
+    mostrarToast('Preencha destino, motivo e data de início!', 'erro');
+    return;
+  }
+  
+  try {
+    const r = await fetch('/api/viagens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destino, motivo, data_inicio: dataInicio, data_fim: dataFim || null })
+    });
+    const d = await r.json();
+    if (d.sucesso) {
+      mostrarToast('✅ Viagem criada com sucesso!', 'sucesso');
+      // Limpar formulário
+      document.getElementById('nova-destino').value = '';
+      document.getElementById('nova-motivo').value = '';
+      document.getElementById('nova-data-fim').value = '';
+      abrirViagem(d.viagem.id);
+    } else {
+      mostrarToast('Erro: ' + d.erro, 'erro');
+    }
+  } catch(e) {
+    mostrarToast('Erro ao criar viagem', 'erro');
+  }
+}
+
+// ==================== ABRIR VIAGEM ====================
+async function abrirViagem(id) {
+  viagemAtualId = id;
+  try {
+    const r = await fetch(`/api/viagens/${id}`);
+    const d = await r.json();
+    renderDetalhe(d);
+    mostrarTela('detalhe');
+    document.getElementById('nav-historico').classList.add('ativo');
+  } catch(e) {
+    mostrarToast('Erro ao carregar viagem', 'erro');
+  }
+}
+
+function renderDetalhe(d) {
+  const { viagem, itens, totais } = d;
+  
+  document.getElementById('detalhe-numero').textContent = viagem.numero_prestacao;
+  document.getElementById('detalhe-destino').textContent = viagem.destino || '—';
+  document.getElementById('detalhe-motivo').textContent = viagem.motivo || '—';
+  
+  const periodo = viagem.data_inicio 
+    ? `📅 ${formatData(viagem.data_inicio)}${viagem.data_fim ? ' → ' + formatData(viagem.data_fim) : ' → em andamento'}`
+    : '';
+  document.getElementById('detalhe-periodo').textContent = periodo;
+  
+  const statusMap = {
+    em_andamento: `<span class="badge badge-amarelo">⏳ Em Andamento</span>`,
+    concluida: `<span class="badge ${viagem.email_enviado ? 'badge-azul' : 'badge-verde'}">${viagem.email_enviado ? '📧 Email Enviado' : '✅ Concluída'}</span>`
+  };
+  document.getElementById('detalhe-badge-container').innerHTML = statusMap[viagem.status] || '';
+  
+  // Alertas
+  document.getElementById('alerta-andamento').style.display = viagem.status === 'em_andamento' ? 'flex' : 'none';
+  document.getElementById('alerta-concluida').style.display = viagem.status === 'concluida' ? 'flex' : 'none';
+  
+  // Card adicionar
+  document.getElementById('card-adicionar').style.display = viagem.status === 'em_andamento' ? 'block' : 'none';
+  
+  // Ações
+  document.getElementById('acoes-andamento').style.display = viagem.status === 'em_andamento' ? 'block' : 'none';
+  document.getElementById('acoes-concluida').style.display = viagem.status === 'concluida' ? 'block' : 'none';
+  
+  // PIX
+  document.getElementById('pix-box').style.display = viagem.status === 'concluida' ? 'block' : 'none';
+  if (viagem.data_pagamento) {
+    document.getElementById('pix-pagamento-data').innerHTML = `📅 <strong>Data para Pagamento: ${formatData(viagem.data_pagamento)}</strong>`;
+  }
+  
+  // Botão email
+  const btnEmail = document.getElementById('btn-enviar-email');
+  if (viagem.email_enviado) {
+    btnEmail.textContent = '✅ Email já enviado — Reenviar';
+    btnEmail.className = 'btn btn-outline btn-lg btn-block';
+  } else {
+    btnEmail.textContent = '📧 Enviar Prestação por Email';
+    btnEmail.className = 'btn btn-rosa btn-lg btn-block';
+  }
+  
+  // Itens
+  renderItens(itens, viagem.status);
+  
+  // Resumo
+  renderResumo(totais);
+}
+
+function renderItens(itens, status) {
+  const lista = document.getElementById('lista-itens');
+  document.getElementById('detalhe-qtd-itens').textContent = `${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`;
+  
+  if (!itens.length) {
+    lista.innerHTML = `<div class="vazio"><div class="vazio-icone">📝</div><div class="vazio-texto">Nenhuma despesa lançada</div><div class="vazio-sub">${status === 'em_andamento' ? 'Use o formulário acima para adicionar' : ''}</div></div>`;
+    return;
+  }
+  
+  const icones = { cafe_manha: '☕', almoco: '🍽️', jantar: '🌙', hospedagem: '🏨', km: '🚗', extra: '📎' };
+  
+  lista.innerHTML = `<div class="item-lista">${itens.map(item => `
+    <div class="item-row">
+      <div class="item-info">
+        <div class="item-desc">${icones[item.tipo] || '📌'} ${item.descricao}</div>
+        <div class="item-detalhe">
+          ${item.tipo === 'km' ? `${item.quantidade} km × R$ ${Number(item.valor_unitario).toFixed(2).replace('.',',')}` : 
+            item.quantidade > 1 ? `${item.quantidade}× R$ ${Number(item.valor_unitario).toFixed(2).replace('.',',')}` : ''}
+          ${item.data_item ? ` • ${formatData(item.data_item)}` : ''}
+        </div>
+      </div>
+      <div class="item-valor">${formatBRL(item.valor_total)}</div>
+      ${status === 'em_andamento' ? `<button class="item-del" onclick="removerItem(${item.id})" title="Remover">🗑️</button>` : ''}
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderResumo(totais) {
+  const linhas = [];
+  if (totais.cafe_manha > 0) linhas.push({ label: `☕ Café da Manhã (${totais.cafe_dias}×)`, valor: totais.cafe_manha });
+  if (totais.almoco > 0) linhas.push({ label: `🍽️ Almoço (${totais.almoco_dias}×)`, valor: totais.almoco });
+  if (totais.jantar > 0) linhas.push({ label: `🌙 Jantar (${totais.jantar_dias}×)`, valor: totais.jantar });
+  if (totais.hospedagem > 0) linhas.push({ label: `🏨 Hospedagem (${totais.hospedagem_noites} noite${totais.hospedagem_noites !== 1 ? 's' : ''})`, valor: totais.hospedagem });
+  if (totais.km > 0) linhas.push({ label: `🚗 Quilometragem (${totais.km_rodados} km)`, valor: totais.km });
+  if (totais.extras > 0) linhas.push({ label: `📎 Despesas Extras`, valor: totais.extras });
+  
+  document.getElementById('resumo-tabela').innerHTML = linhas.map(l => `
+    <tr>
+      <td class="label">${l.label}</td>
+      <td class="valor">${formatBRL(l.valor)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="2" style="color:var(--cinza);text-align:center;padding:16px;">Nenhuma despesa lançada</td></tr>';
+  
+  document.getElementById('resumo-total-valor').textContent = formatBRL(totais.total);
+}
+
+// ==================== ADICIONAR ITEM ====================
+function selecionarTipo(tipo) {
+  tipoSelecionado = tipo;
+  document.querySelectorAll('.tipo-btn').forEach(b => b.classList.remove('selecionado'));
+  event.currentTarget.classList.add('selecionado');
+  
+  const formItem = document.getElementById('form-item');
+  formItem.style.display = 'block';
+  
+  const labelQtd = document.getElementById('label-qtd');
+  const labelValor = document.getElementById('label-valor');
+  const inputQtd = document.getElementById('item-qtd');
+  const inputValor = document.getElementById('item-valor');
+  const inputDesc = document.getElementById('item-desc');
+  const grupoDesc = document.getElementById('grupo-desc');
+  
+  if (tipo === 'km') {
+    labelQtd.textContent = 'Quilômetros rodados';
+    labelValor.textContent = 'Valor por km (R$)';
+    inputQtd.placeholder = '0';
+    inputQtd.value = '';
+    inputValor.value = '1.60';
+    grupoDesc.style.display = 'none';
+    inputDesc.value = 'Quilometragem';
+  } else if (tipo === 'extra') {
+    labelQtd.textContent = 'Quantidade';
+    labelValor.textContent = 'Valor (R$)';
+    inputQtd.value = '1';
+    inputValor.value = '';
+    grupoDesc.style.display = 'block';
+    inputDesc.value = '';
+    inputDesc.placeholder = 'Ex: Passagem aérea, Uber, Pedágio...';
+  } else {
+    const info = tabela[tipo] || {};
+    labelQtd.textContent = tipo === 'hospedagem' ? 'Número de noites' : 'Número de dias';
+    labelValor.textContent = 'Valor unitário (R$)';
+    inputQtd.value = '1';
+    inputValor.value = info.valor || '';
+    grupoDesc.style.display = 'none';
+    inputDesc.value = info.label || tipo;
+  }
+  
+  atualizarPreviewTotal();
+  document.getElementById('item-qtd').focus();
+}
+
+function atualizarPreviewTotal() {
+  const qtd = parseFloat(document.getElementById('item-qtd').value) || 0;
+  const val = parseFloat(document.getElementById('item-valor').value) || 0;
+  document.getElementById('item-total-preview').textContent = formatBRL(qtd * val);
+}
+
+document.addEventListener('input', function(e) {
+  if (e.target.id === 'item-qtd' || e.target.id === 'item-valor') {
+    atualizarPreviewTotal();
+  }
+});
+
+function cancelarItem() {
+  tipoSelecionado = null;
+  document.getElementById('form-item').style.display = 'none';
+  document.querySelectorAll('.tipo-btn').forEach(b => b.classList.remove('selecionado'));
+}
+
+async function adicionarItem() {
+  if (!tipoSelecionado) return;
+  const qtd = parseFloat(document.getElementById('item-qtd').value);
+  const val = parseFloat(document.getElementById('item-valor').value);
+  const desc = document.getElementById('item-desc').value.trim();
+  const data = document.getElementById('item-data').value;
+  
+  if (!qtd || qtd <= 0) { mostrarToast('Informe a quantidade!', 'erro'); return; }
+  if (!val || val <= 0) { mostrarToast('Informe o valor!', 'erro'); return; }
+  if (tipoSelecionado === 'extra' && !desc) { mostrarToast('Informe a descrição!', 'erro'); return; }
+  
+  try {
+    const r = await fetch(`/api/viagens/${viagemAtualId}/itens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: tipoSelecionado,
+        descricao: desc || tabela[tipoSelecionado]?.label || tipoSelecionado,
+        quantidade: qtd,
+        valor_unitario: val,
+        data_item: data || null
+      })
+    });
+    const d = await r.json();
+    if (d.sucesso) {
+      mostrarToast('✅ Despesa adicionada!', 'sucesso');
+      cancelarItem();
+      abrirViagem(viagemAtualId);
+    }
+  } catch(e) {
+    mostrarToast('Erro ao adicionar item', 'erro');
+  }
+}
+
+async function removerItem(itemId) {
+  if (!confirm('Remover esta despesa?')) return;
+  try {
+    await fetch(`/api/viagens/${viagemAtualId}/itens/${itemId}`, { method: 'DELETE' });
+    mostrarToast('Item removido', 'sucesso');
+    abrirViagem(viagemAtualId);
+  } catch(e) {}
+}
+
+// ==================== CONCLUIR VIAGEM ====================
+function abrirModalConcluir() {
+  const hoje = new Date().toISOString().split('T')[0];
+  document.getElementById('concluir-data-fim').value = hoje;
+  document.getElementById('concluir-data-pagamento').value = calcularProximoDia15();
+  document.getElementById('concluir-obs').value = '';
+  document.getElementById('modal-concluir').classList.add('aberto');
+}
+
+async function concluirViagem() {
+  const dataFim = document.getElementById('concluir-data-fim').value;
+  const obs = document.getElementById('concluir-obs').value.trim();
+  
+  if (!dataFim) { mostrarToast('Informe a data de retorno!', 'erro'); return; }
+  
+  try {
+    const r = await fetch(`/api/viagens/${viagemAtualId}/concluir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_fim: dataFim, observacoes: obs })
+    });
+    const d = await r.json();
+    if (d.sucesso) {
+      fecharModal('modal-concluir');
+      mostrarToast('✅ Viagem concluída! Pronta para envio.', 'sucesso');
+      abrirViagem(viagemAtualId);
+    }
+  } catch(e) {
+    mostrarToast('Erro ao concluir viagem', 'erro');
+  }
+}
+
+// ==================== EMAIL ====================
+async function prepararEnvioEmail() {
+  try {
+    const r = await fetch(`/api/viagens/${viagemAtualId}/email-data`);
+    const d = await r.json();
+    const { viagem, totais } = d;
+    
+    document.getElementById('modal-email-resumo').innerHTML = `
+      <div style="font-size:13px;font-weight:600;color:var(--azul);margin-bottom:8px;">📋 Resumo da Prestação</div>
+      <div style="font-size:13px;color:#1E40AF;"><strong>${viagem.numero_prestacao}</strong> — ${viagem.destino}</div>
+      <div style="font-size:13px;color:#1E40AF;">${formatData(viagem.data_inicio)} → ${formatData(viagem.data_fim)}</div>
+      <div style="font-size:16px;font-weight:700;color:#1E40AF;margin-top:8px;">Total: ${formatBRL(totais.total)}</div>
+      <div style="font-size:12px;color:#1E40AF;margin-top:4px;">📅 Pagamento: ${formatData(viagem.data_pagamento)}</div>
+    `;
+    
+    document.getElementById('modal-email').classList.add('aberto');
+  } catch(e) {
+    mostrarToast('Erro ao preparar email', 'erro');
+  }
+}
+
+async function confirmarEnvioEmail() {
+  const btn = document.getElementById('btn-confirmar-email');
+  btn.textContent = 'Solicitando envio...';
+  btn.disabled = true;
+  
+  try {
+    // Marcar como enviado no banco
+    await fetch(`/api/viagens/${viagemAtualId}/marcar-enviado`, { method: 'POST' });
+    fecharModal('modal-email');
+    mostrarToast('✅ Solicitação de envio registrada! O Manus enviará o email em instantes.', 'sucesso');
+    abrirViagem(viagemAtualId);
+    
+    // Notificar o sistema para envio via Manus
+    await fetch(`/api/viagens/${viagemAtualId}/solicitar-email`, { method: 'POST' }).catch(() => {});
+  } catch(e) {
+    mostrarToast('Erro ao processar solicitação', 'erro');
+  } finally {
+    btn.textContent = '📧 Enviar Agora';
+    btn.disabled = false;
+  }
+}
+
+// ==================== UTILITÁRIOS ====================
+function fecharModal(id) {
+  document.getElementById(id).classList.remove('aberto');
+}
+
+function formatBRL(val) {
+  return 'R$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatData(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+let toastTimer;
+function mostrarToast(msg, tipo = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast visivel ${tipo}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+// Fechar modal clicando fora
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('aberto');
+  });
+});
+
+// ==================== START ====================
+init();
+</script>
+</body>
+</html>
