@@ -407,6 +407,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await abrir_viagem_direto(update, context, texto)
         return
     
+    # Aguardando dados da viagem (destino/motivo não informados)?
+    if context.user_data.get("aguardando_dados_viagem") is not None:
+        context.user_data.pop("aguardando_dados_viagem")
+        # Usar a IA para extrair destino e motivo do texto fornecido
+        dados_extraidos = await interpretar_mensagem(f"Abrir viagem: {texto}")
+        destino = (dados_extraidos.get("destino") or "").strip().upper()
+        motivo = (dados_extraidos.get("motivo") or "").strip().upper()
+        # Se ainda não tem destino, usar o texto como destino
+        if not destino:
+            destino = texto.upper()
+        await abrir_viagem_direto(update, context, None, {"destino": destino, "motivo": motivo or "VIAGEM DE NEGÓCIOS"})
+        return
+    
     # Aguardando confirmação de fechamento?
     if context.user_data.get("aguardando_confirmacao_fechamento"):
         viagem_id = context.user_data.get("viagem_id_fechar")
@@ -630,15 +643,30 @@ async def abrir_viagem_direto(update, context, texto_livre=None, dados_ia=None):
     
     # Extrair destino e motivo
     if dados_ia:
-        destino = (dados_ia.get("destino") or "").strip().upper() or "NÃO INFORMADO"
-        motivo = (dados_ia.get("motivo") or "").strip().upper() or "VIAGEM DE NEGÓCIOS"
+        destino = (dados_ia.get("destino") or "").strip().upper()
+        motivo = (dados_ia.get("motivo") or "").strip().upper()
     elif texto_livre:
         # Usar IA para extrair
         dados = await interpretar_mensagem(f"Abrir viagem: {texto_livre}")
-        destino = (dados.get("destino") or texto_livre.upper()).upper()
-        motivo = (dados.get("motivo") or "VIAGEM DE NEGÓCIOS").upper()
+        destino = (dados.get("destino") or "").strip().upper()
+        motivo = (dados.get("motivo") or "").strip().upper()
     else:
-        destino = "NÃO INFORMADO"
+        destino = ""
+        motivo = ""
+    
+    # Se destino não foi informado, perguntar antes de criar a viagem
+    if not destino:
+        context.user_data["aguardando_dados_viagem"] = {"motivo": motivo}
+        await update.message.reply_text(
+            "✈️ Você deseja abrir uma nova viagem?\n\n"
+            "Por favor, informe o *destino* e o *motivo* da viagem.\n\n"
+            "Exemplo: _São Paulo — Reunião com fornecedores_",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Se motivo não foi informado, usar padrão
+    if not motivo:
         motivo = "VIAGEM DE NEGÓCIOS"
     
     numero = gerar_numero()
