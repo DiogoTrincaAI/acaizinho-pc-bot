@@ -630,8 +630,8 @@ async def abrir_viagem_direto(update, context, texto_livre=None, dados_ia=None):
     
     # Extrair destino e motivo
     if dados_ia:
-        destino = dados_ia.get("destino", "").upper() or "NÃO INFORMADO"
-        motivo = dados_ia.get("motivo", "").upper() or "VIAGEM DE NEGÓCIOS"
+        destino = (dados_ia.get("destino") or "").strip().upper() or "NÃO INFORMADO"
+        motivo = (dados_ia.get("motivo") or "").strip().upper() or "VIAGEM DE NEGÓCIOS"
     elif texto_livre:
         # Usar IA para extrair
         dados = await interpretar_mensagem(f"Abrir viagem: {texto_livre}")
