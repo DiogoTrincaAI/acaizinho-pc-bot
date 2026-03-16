@@ -871,13 +871,13 @@ async def executar_fechamento(update, context, viagem_id):
     
     totais = calcular_totais(viagem_id)
     
-    # Enviar email via MCP (script externo)
-    await enviar_email_relatorio(viagem, itens, totais, data_pagamento)
-    
-    # Gerar relatório comparativo
+    # Gerar relatório comparativo e enviar ao usuário PRIMEIRO
     msg = await gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento)
-    
     await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    
+    # Enviar email em background (não bloqueia a resposta ao usuário)
+    import asyncio
+    asyncio.create_task(enviar_email_relatorio(viagem, itens, totais, data_pagamento))
 
 async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento):
     """Gera relatório comparativo valores pagos x política"""
@@ -1006,11 +1006,30 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
         msg['Cc'] = email_cc
         msg.attach(MIMEText(html_body, 'html'))
         
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(smtp_email, smtp_password)
-            server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
+        # Tentar porta 587 (STARTTLS) primeiro, depois 465 (SSL) como fallback
+        enviado = False
+        for porta, usar_ssl in [(587, False), (465, True)]:
+            try:
+                if usar_ssl:
+                    with smtplib.SMTP_SSL('smtp.gmail.com', porta) as server:
+                        server.login(smtp_email, smtp_password)
+                        server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
+                else:
+                    with smtplib.SMTP('smtp.gmail.com', porta, timeout=30) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                        server.login(smtp_email, smtp_password)
+                        server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
+                logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc}) via porta {porta}")
+                enviado = True
+                break
+            except Exception as e_porta:
+                logger.warning(f"Falha na porta {porta}: {e_porta}")
+                continue
         
-        logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc})")
+        if not enviado:
+            logger.error("Falha ao enviar email por todas as portas SMTP")
     except Exception as e:
         logger.error(f"Erro ao enviar email: {e}")
 
