@@ -1006,30 +1006,46 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
         msg['Cc'] = email_cc
         msg.attach(MIMEText(html_body, 'html'))
         
-        # Tentar porta 587 (STARTTLS) primeiro, depois 465 (SSL) como fallback
-        enviado = False
-        for porta, usar_ssl in [(587, False), (465, True)]:
-            try:
-                if usar_ssl:
-                    with smtplib.SMTP_SSL('smtp.gmail.com', porta) as server:
-                        server.login(smtp_email, smtp_password)
-                        server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
-                else:
-                    with smtplib.SMTP('smtp.gmail.com', porta, timeout=30) as server:
-                        server.ehlo()
-                        server.starttls()
-                        server.ehlo()
-                        server.login(smtp_email, smtp_password)
-                        server.sendmail(smtp_email, [email_to, email_cc], msg.as_string())
-                logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc}) via porta {porta}")
-                enviado = True
-                break
-            except Exception as e_porta:
-                logger.warning(f"Falha na porta {porta}: {e_porta}")
-                continue
+        # Enviar via run_in_executor para não bloquear o event loop
+        # Usa App Password do Gmail (bqfy ycmw vpny jaim)
+        raw_msg = msg.as_bytes()
         
-        if not enviado:
-            logger.error("Falha ao enviar email por todas as portas SMTP")
+        def send_email_sync():
+            import smtplib
+            import ssl
+            erros = []
+            
+            # Tentativa 1: porta 587 STARTTLS
+            try:
+                ctx = ssl.create_default_context()
+                with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as s:
+                    s.ehlo()
+                    s.starttls(context=ctx)
+                    s.ehlo()
+                    s.login(smtp_email, smtp_password)
+                    s.sendmail(smtp_email, [email_to, email_cc], raw_msg)
+                return True, 587
+            except Exception as e1:
+                erros.append(f'587: {e1}')
+            
+            # Tentativa 2: porta 465 SSL
+            try:
+                ctx = ssl.create_default_context()
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=30) as s:
+                    s.login(smtp_email, smtp_password)
+                    s.sendmail(smtp_email, [email_to, email_cc], raw_msg)
+                return True, 465
+            except Exception as e2:
+                erros.append(f'465: {e2}')
+            
+            return False, erros
+        
+        loop = asyncio.get_event_loop()
+        ok, info = await loop.run_in_executor(None, send_email_sync)
+        if ok:
+            logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc}) via porta {info}")
+        else:
+            logger.error(f"❌ Falha ao enviar email: {info}")
     except Exception as e:
         logger.error(f"Erro ao enviar email: {e}")
 
