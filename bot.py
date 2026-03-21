@@ -427,25 +427,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Validação básica de email
         import re
         if re.match(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$', email_digitado):
-            # Mostrar confirmação antes de fechar
+            # Salvar email extra e voltar para tela de seleção
+            context.user_data[f"eextra_{viagem_id}"] = email_digitado
+            selecionados = context.user_data.get(f"esel_{viagem_id}", [])
+            
             conn = get_db()
             viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
             conn.close()
             totais = calcular_totais(viagem_id)
-            # Salvar email no contexto para confirmação
-            context.user_data["email_customizado"] = email_digitado
-            context.user_data["viagem_id_email_custom"] = viagem_id
-            keyboard = [
-                [InlineKeyboardButton("✅ Confirmar e Enviar", callback_data=f"confirmar_email_custom_{viagem_id}")],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")]
-            ]
+            
+            keyboard = _montar_teclado_emails(viagem_id, selecionados, email_digitado)
             await update.message.reply_text(
-                f"🏁 *Confirmar Fechamento?*\n\n"
+                f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
                 f"📍 {viagem['destino']}\n"
-                f"💰 *Total: {fmt_brl(totais['total'])}*\n\n"
-                f"📧 *Enviar para:* `{email_digitado}`\n\n"
-                f"💳 PIX: 063.291.156-56 (Nubank)\n"
-                f"📅 Pagamento: {fmt_data(proximo_dia_15())}",
+                f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
+                f"📧 *Selecione os e-mails para envio:*\n"
+                f"_(toque para marcar ✅ ou desmarcar ☐)_",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
@@ -862,41 +859,78 @@ EMAILS_PREDEFINIDOS = [
     {"label": "Diogo (Gmail)",         "email": "diogomachadogv@gmail.com"},
 ]
 
+def _montar_teclado_emails(viagem_id, selecionados: list, email_extra: str = ""):
+    """Monta o teclado inline com toggle de emails. selecionados = lista de indices marcados."""
+    keyboard = []
+    for i, item in enumerate(EMAILS_PREDEFINIDOS):
+        marcado = i in selecionados
+        icone = "✅" if marcado else "☐"
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{icone} {item['label']}",
+                callback_data=f"etoggle_{viagem_id}_{i}"
+            )
+        ])
+    
+    # Email extra digitado (se houver)
+    if email_extra:
+        keyboard.append([
+            InlineKeyboardButton(
+                f"✅ {email_extra} ❌",
+                callback_data=f"eremove_extra_{viagem_id}"
+            )
+        ])
+        keyboard.append([
+            InlineKeyboardButton("✏️ Trocar e-mail extra", callback_data=f"eoutro_{viagem_id}")
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton("✏️ Adicionar outro e-mail", callback_data=f"eoutro_{viagem_id}")
+        ])
+    
+    # Linha de ações
+    tem_algum = bool(selecionados) or bool(email_extra)
+    keyboard.append([
+        InlineKeyboardButton(
+            "✅ Confirmar Envio" if tem_algum else "🚫 Nenhum selecionado",
+            callback_data=f"econfirmar_{viagem_id}" if tem_algum else "noop"
+        )
+    ])
+    keyboard.append([
+        InlineKeyboardButton("📊 Ver Resumo", callback_data=f"ver_resumo_{viagem_id}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
+    ])
+    return keyboard
+
+def _texto_emails_selecionados(selecionados: list, email_extra: str = "") -> str:
+    """Gera texto descritivo dos emails selecionados."""
+    emails = [EMAILS_PREDEFINIDOS[i]["email"] for i in selecionados]
+    if email_extra:
+        emails.append(email_extra)
+    if not emails:
+        return "_Nenhum e-mail selecionado_"
+    return "\n".join(f"• `{e}`" for e in emails)
+
 async def fechar_viagem_handler(update, context, viagem_id):
-    """Pergunta para qual e-mail enviar antes de fechar a viagem"""
+    """Mostra tela de seleção de e-mails com toggle antes de fechar a viagem"""
     conn = get_db()
     viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
     conn.close()
     
     totais = calcular_totais(viagem_id)
     
-    # Salvar viagem_id no contexto para usar nos callbacks
-    context.user_data["fechando_viagem_id"] = viagem_id
+    # Inicializar estado: nenhum selecionado por padrão
+    context.user_data[f"esel_{viagem_id}"] = []       # indices selecionados
+    context.user_data[f"eextra_{viagem_id}"] = ""     # email extra digitado
     
-    # Montar teclado com emails pré-definidos
-    keyboard = []
-    for i, item in enumerate(EMAILS_PREDEFINIDOS):
-        keyboard.append([
-            InlineKeyboardButton(
-                f"📧 {item['label']}",
-                callback_data=f"email_fechar_{viagem_id}_{i}"
-            )
-        ])
-    
-    # Opção de digitar outro email
-    keyboard.append([
-        InlineKeyboardButton("✏️ Outro e-mail...", callback_data=f"email_outro_{viagem_id}")
-    ])
-    keyboard.append([
-        InlineKeyboardButton("📊 Ver Resumo Primeiro", callback_data=f"ver_resumo_{viagem_id}"),
-        InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
-    ])
+    keyboard = _montar_teclado_emails(viagem_id, [], "")
     
     msg = (
         f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
         f"📍 {viagem['destino']}\n"
         f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
-        f"📧 *Para qual e-mail enviar o relatório?*"
+        f"📧 *Selecione os e-mails para envio:*\n"
+        f"_(toque para marcar ✅ ou desmarcar ☐)_"
     )
     
     await update.message.reply_text(
@@ -905,7 +939,7 @@ async def fechar_viagem_handler(update, context, viagem_id):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def executar_fechamento(update, context, viagem_id, email_destino=None, email_cc_extra=None):
+async def executar_fechamento(update, context, viagem_id, email_destino=None, email_cc_extra=None, lista_emails=None):
     """Executa o fechamento da viagem e envia email"""
     conn = get_db()
     hoje = date.today().isoformat()
@@ -923,17 +957,23 @@ async def executar_fechamento(update, context, viagem_id, email_destino=None, em
     
     totais = calcular_totais(viagem_id)
     
+    # Determinar lista final de emails
+    if lista_emails:
+        emails_finais = lista_emails
+    elif email_destino:
+        emails_finais = [email_destino]
+    else:
+        emails_finais = [os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")]
+    
     # Gerar relatório comparativo e enviar ao usuário PRIMEIRO
-    email_exibir = email_destino if email_destino else os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
-    email_cc_exibir = email_cc_extra if email_cc_extra else os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
-    msg = await gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, email_exibir, email_cc_exibir)
+    msg = await gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, emails_finais)
     await update.effective_message.reply_text(msg, parse_mode="Markdown")
     
-    # Enviar email em background (não bloqueia a resposta ao usuário)
+    # Enviar email em background para cada destinatário
     import asyncio
-    asyncio.create_task(enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=email_destino, email_cc_extra=email_cc_extra))
+    asyncio.create_task(enviar_email_para_lista(viagem, itens, totais, data_pagamento, emails_finais))
 
-async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, email_to=None, email_cc=None):
+async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, emails_lista=None, email_cc=None):
     """Gera relatório comparativo valores pagos x política"""
     msg = (
         f"🎉 *Viagem Encerrada com Sucesso!*\n\n"
@@ -973,16 +1013,19 @@ async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, ema
     msg += f"Titular: Diogo Machado Santos\n"
     msg += f"Banco: Nubank\n"
     msg += f"📅 *Data: {fmt_data(data_pagamento)}*\n\n"
-    _email_to = email_to or 'hithiara.ferreira@acaifood.com'
-    _email_cc = email_cc or 'diogo.machado@acaifood.com'
+    _emails = emails_lista if emails_lista else ['hithiara.ferreira@acaifood.com']
     msg += f"📧 Email enviado para:\n"
-    msg += f"_• {_email_to}_\n"
-    if _email_cc and _email_cc != _email_to:
-        msg += f"_• cópia: {_email_cc}_\n"
+    for _e in _emails:
+        msg += f"_• {_e}_\n"
     msg += "\n"
     msg += f"Paz e bem! 🙏"
     
     return msg
+
+async def enviar_email_para_lista(viagem, itens, totais, data_pagamento, emails_lista: list):
+    """Envia email para cada endereço da lista"""
+    for email in emails_lista:
+        await enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=email)
 
 async def enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=None, email_cc_extra=None):
     """Envia email de relatório via API do Brevo (HTTPS - funciona no Railway)"""
@@ -1110,91 +1153,92 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⏳ Processando fechamento...")
         await executar_fechamento(update, context, viagem_id)
     
-    elif data.startswith("email_fechar_"):
-        # Formato: email_fechar_{viagem_id}_{indice_email}
+    elif data == "noop":
+        await query.answer("Selecione pelo menos um e-mail!", show_alert=True)
+    
+    elif data.startswith("etoggle_"):
+        # Toggle marcar/desmarcar email pré-definido
+        # Formato: etoggle_{viagem_id}_{indice}
         partes = data.split("_")
-        viagem_id = int(partes[2])
-        indice = int(partes[3])
-        email_escolhido = EMAILS_PREDEFINIDOS[indice]["email"]
-        label_escolhido = EMAILS_PREDEFINIDOS[indice]["label"]
+        viagem_id = int(partes[1])
+        indice = int(partes[2])
         
-        # Mostrar confirmação final com o email escolhido
+        selecionados = context.user_data.get(f"esel_{viagem_id}", [])
+        if indice in selecionados:
+            selecionados.remove(indice)
+        else:
+            selecionados.append(indice)
+        context.user_data[f"esel_{viagem_id}"] = selecionados
+        email_extra = context.user_data.get(f"eextra_{viagem_id}", "")
+        
         conn = get_db()
         viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
         conn.close()
         totais = calcular_totais(viagem_id)
         
-        keyboard = [
-            [InlineKeyboardButton("✅ Confirmar e Enviar", callback_data=f"confirmar_email_{viagem_id}_{indice}")],
-            [InlineKeyboardButton("🔙 Voltar", callback_data=f"voltar_email_{viagem_id}"),
-             InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")]
-        ]
-        await query.edit_message_text(
-            f"🏁 *Confirmar Fechamento?*\n\n"
-            f"📍 {viagem['destino']}\n"
-            f"💰 *Total: {fmt_brl(totais['total'])}*\n\n"
-            f"📧 *Enviar para:* {label_escolhido}\n"
-            f"✉️ `{email_escolhido}`\n\n"
-            f"💳 PIX: 063.291.156-56 (Nubank)\n"
-            f"📅 Pagamento: {fmt_data(proximo_dia_15())}",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    
-    elif data.startswith("confirmar_email_"):
-        # Formato: confirmar_email_{viagem_id}_{indice_email}
-        partes = data.split("_")
-        viagem_id = int(partes[2])
-        indice = int(partes[3])
-        email_escolhido = EMAILS_PREDEFINIDOS[indice]["email"]
-        
-        await query.edit_message_text("⏳ Processando fechamento...")
-        await executar_fechamento(update, context, viagem_id, email_destino=email_escolhido)
-    
-    elif data.startswith("email_outro_"):
-        viagem_id = int(data.split("_")[-1])
-        context.user_data["aguardando_email_viagem_id"] = viagem_id
-        await query.edit_message_text(
-            "✏️ *Digite o e-mail para envio do relatório:*\n\n"
-            "_Exemplo: financeiro@empresa.com_",
-            parse_mode="Markdown"
-        )
-    
-    elif data.startswith("confirmar_email_custom_"):
-        viagem_id = int(data.split("_")[-1])
-        email_escolhido = context.user_data.pop("email_customizado", None)
-        context.user_data.pop("viagem_id_email_custom", None)
-        if not email_escolhido:
-            await query.edit_message_text("❌ Erro: e-mail não encontrado. Tente novamente.")
-            return
-        await query.edit_message_text("⏳ Processando fechamento...")
-        await executar_fechamento(update, context, viagem_id, email_destino=email_escolhido)
-    
-    elif data.startswith("voltar_email_"):
-        viagem_id = int(data.split("_")[-1])
-        conn = get_db()
-        viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
-        conn.close()
-        totais = calcular_totais(viagem_id)
-        
-        keyboard = []
-        for i, item in enumerate(EMAILS_PREDEFINIDOS):
-            keyboard.append([
-                InlineKeyboardButton(f"📧 {item['label']}", callback_data=f"email_fechar_{viagem_id}_{i}")
-            ])
-        keyboard.append([InlineKeyboardButton("✏️ Outro e-mail...", callback_data=f"email_outro_{viagem_id}")])
-        keyboard.append([
-            InlineKeyboardButton("📊 Ver Resumo Primeiro", callback_data=f"ver_resumo_{viagem_id}"),
-            InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
-        ])
+        keyboard = _montar_teclado_emails(viagem_id, selecionados, email_extra)
         await query.edit_message_text(
             f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
             f"📍 {viagem['destino']}\n"
             f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
-            f"📧 *Para qual e-mail enviar o relatório?*",
+            f"📧 *Selecione os e-mails para envio:*\n"
+            f"_(toque para marcar ✅ ou desmarcar ☐)_",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+    
+    elif data.startswith("eoutro_"):
+        # Pedir e-mail extra digitado
+        viagem_id = int(data.split("_")[1])
+        context.user_data["aguardando_email_viagem_id"] = viagem_id
+        await query.edit_message_text(
+            "✏️ *Digite o e-mail adicional:*\n\n"
+            "_Exemplo: financeiro@empresa.com_",
+            parse_mode="Markdown"
+        )
+    
+    elif data.startswith("eremove_extra_"):
+        # Remover email extra
+        viagem_id = int(data.split("_")[-1])
+        context.user_data[f"eextra_{viagem_id}"] = ""
+        
+        selecionados = context.user_data.get(f"esel_{viagem_id}", [])
+        conn = get_db()
+        viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
+        conn.close()
+        totais = calcular_totais(viagem_id)
+        
+        keyboard = _montar_teclado_emails(viagem_id, selecionados, "")
+        await query.edit_message_text(
+            f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
+            f"📍 {viagem['destino']}\n"
+            f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
+            f"📧 *Selecione os e-mails para envio:*\n"
+            f"_(toque para marcar ✅ ou desmarcar ☐)_",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif data.startswith("econfirmar_"):
+        # Confirmar fechamento com os emails selecionados
+        viagem_id = int(data.split("_")[1])
+        selecionados = context.user_data.get(f"esel_{viagem_id}", [])
+        email_extra = context.user_data.get(f"eextra_{viagem_id}", "")
+        
+        lista_emails = [EMAILS_PREDEFINIDOS[i]["email"] for i in selecionados]
+        if email_extra:
+            lista_emails.append(email_extra)
+        
+        if not lista_emails:
+            await query.answer("Selecione pelo menos um e-mail!", show_alert=True)
+            return
+        
+        # Limpar estado
+        context.user_data.pop(f"esel_{viagem_id}", None)
+        context.user_data.pop(f"eextra_{viagem_id}", None)
+        
+        await query.edit_message_text("⏳ Processando fechamento...")
+        await executar_fechamento(update, context, viagem_id, lista_emails=lista_emails)
     
     elif data.startswith("ver_resumo_"):
         viagem_id = int(data.split("_")[-1])
