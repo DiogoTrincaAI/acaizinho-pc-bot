@@ -5,3 +5,4 @@ httpx==0.28.1
 aiofiles==25.1.0
 pydub==0.25.1
 gunicorn==23.0.0
+requests==2.32.3
