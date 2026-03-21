@@ -927,19 +927,17 @@ async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento):
     return msg
 
 async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
-    """Envia email de relatório via SMTP (Gmail)"""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
+    """Envia email de relatório via API do Brevo (HTTPS - funciona no Railway)"""
+    import requests as req_lib
     
     try:
-        smtp_email = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
-        smtp_password = os.environ.get("SMTP_PASSWORD", "")
+        brevo_api_key = os.environ.get("BREVO_API_KEY", "")
+        email_from = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
         email_to = os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
         email_cc = os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
         
-        if not smtp_password:
-            logger.error("SMTP_PASSWORD não configurado")
+        if not brevo_api_key:
+            logger.error("BREVO_API_KEY não configurado")
             return
         
         v = dict(viagem)
@@ -999,53 +997,36 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
 </body>
 </html>"""
         
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = assunto
-        msg['From'] = smtp_email
-        msg['To'] = email_to
-        msg['Cc'] = email_cc
-        msg.attach(MIMEText(html_body, 'html'))
+        # Payload para a API do Brevo
+        payload = {
+            "sender": {"name": "Açaizinho O Original", "email": email_from},
+            "to": [{"email": email_to}],
+            "cc": [{"email": email_cc}],
+            "subject": assunto,
+            "htmlContent": html_body
+        }
         
-        # Enviar via run_in_executor para não bloquear o event loop
-        # Usa App Password do Gmail (bqfy ycmw vpny jaim)
-        raw_msg = msg.as_bytes()
+        headers_brevo = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "api-key": brevo_api_key
+        }
         
-        def send_email_sync():
-            import smtplib
-            import ssl
-            erros = []
-            
-            # Tentativa 1: porta 587 STARTTLS
-            try:
-                ctx = ssl.create_default_context()
-                with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as s:
-                    s.ehlo()
-                    s.starttls(context=ctx)
-                    s.ehlo()
-                    s.login(smtp_email, smtp_password)
-                    s.sendmail(smtp_email, [email_to, email_cc], raw_msg)
-                return True, 587
-            except Exception as e1:
-                erros.append(f'587: {e1}')
-            
-            # Tentativa 2: porta 465 SSL
-            try:
-                ctx = ssl.create_default_context()
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=30) as s:
-                    s.login(smtp_email, smtp_password)
-                    s.sendmail(smtp_email, [email_to, email_cc], raw_msg)
-                return True, 465
-            except Exception as e2:
-                erros.append(f'465: {e2}')
-            
-            return False, erros
+        def send_brevo_sync():
+            r = req_lib.post(
+                "https://api.brevo.com/v3/smtp/email",
+                json=payload,
+                headers=headers_brevo,
+                timeout=30
+            )
+            return r.status_code, r.text
         
         loop = asyncio.get_event_loop()
-        ok, info = await loop.run_in_executor(None, send_email_sync)
-        if ok:
-            logger.info(f"✅ Email enviado para {email_to} (cc: {email_cc}) via porta {info}")
+        status_code, resp_text = await loop.run_in_executor(None, send_brevo_sync)
+        if status_code in [200, 201]:
+            logger.info(f"✅ Email enviado via Brevo para {email_to} (cc: {email_cc})")
         else:
-            logger.error(f"❌ Falha ao enviar email: {info}")
+            logger.error(f"❌ Falha ao enviar email via Brevo: {status_code} - {resp_text}")
     except Exception as e:
         logger.error(f"Erro ao enviar email: {e}")
 
