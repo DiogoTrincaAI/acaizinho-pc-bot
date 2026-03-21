@@ -85,6 +85,35 @@ def index():
 def health():
     return jsonify({"status": "ok", "service": "Açaizinho PC"})
 
+@app.route("/api/test-email", methods=["GET"])
+def test_email():
+    """Endpoint de diagnóstico para verificar se o SMTP funciona no Railway"""
+    import smtplib
+    import ssl
+    smtp_email = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    results = {}
+    # Teste porta 587
+    try:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+            s.ehlo()
+            s.starttls(context=ctx)
+            s.ehlo()
+            s.login(smtp_email, smtp_password)
+        results['587'] = 'SUCESSO'
+    except Exception as e:
+        results['587'] = f'ERRO: {str(e)}'
+    # Teste porta 465
+    try:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=15) as s:
+            s.login(smtp_email, smtp_password)
+        results['465'] = 'SUCESSO'
+    except Exception as e:
+        results['465'] = f'ERRO: {str(e)}'
+    return jsonify({"smtp_email": smtp_email, "password_len": len(smtp_password), "results": results})
+
 @app.route("/api/viagens", methods=["GET"])
 def listar_viagens():
     conn = get_db()
