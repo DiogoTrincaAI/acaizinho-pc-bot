@@ -420,6 +420,43 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await abrir_viagem_direto(update, context, None, {"destino": destino, "motivo": motivo or "VIAGEM DE NEGÓCIOS"})
         return
     
+    # Aguardando e-mail digitado pelo usuário para fechar viagem?
+    if context.user_data.get("aguardando_email_viagem_id"):
+        viagem_id = context.user_data.pop("aguardando_email_viagem_id")
+        email_digitado = texto.strip().lower()
+        # Validação básica de email
+        import re
+        if re.match(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$', email_digitado):
+            # Mostrar confirmação antes de fechar
+            conn = get_db()
+            viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
+            conn.close()
+            totais = calcular_totais(viagem_id)
+            # Salvar email no contexto para confirmação
+            context.user_data["email_customizado"] = email_digitado
+            context.user_data["viagem_id_email_custom"] = viagem_id
+            keyboard = [
+                [InlineKeyboardButton("✅ Confirmar e Enviar", callback_data=f"confirmar_email_custom_{viagem_id}")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")]
+            ]
+            await update.message.reply_text(
+                f"🏁 *Confirmar Fechamento?*\n\n"
+                f"📍 {viagem['destino']}\n"
+                f"💰 *Total: {fmt_brl(totais['total'])}*\n\n"
+                f"📧 *Enviar para:* `{email_digitado}`\n\n"
+                f"💳 PIX: 063.291.156-56 (Nubank)\n"
+                f"📅 Pagamento: {fmt_data(proximo_dia_15())}",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            context.user_data["aguardando_email_viagem_id"] = viagem_id  # mantém aguardando
+            await update.message.reply_text(
+                "❌ E-mail inválido. Por favor, digite um e-mail válido.\n\nExemplo: _financeiro@empresa.com_",
+                parse_mode="Markdown"
+            )
+        return
+    
     # Aguardando confirmação de fechamento?
     if context.user_data.get("aguardando_confirmacao_fechamento"):
         viagem_id = context.user_data.get("viagem_id_fechar")
@@ -818,33 +855,48 @@ async def enviar_resumo(update, viagem_id):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+# ==================== LISTA DE EMAILS PRÉ-DEFINIDOS ====================
+EMAILS_PREDEFINIDOS = [
+    {"label": "Financeiro (Hithiara)", "email": "hithiara.ferreira@acaifood.com"},
+    {"label": "Diogo Machado",         "email": "diogo.machado@acaifood.com"},
+    {"label": "Diogo (Gmail)",         "email": "diogomachadogv@gmail.com"},
+]
+
 async def fechar_viagem_handler(update, context, viagem_id):
-    """Solicita confirmação para fechar a viagem"""
+    """Pergunta para qual e-mail enviar antes de fechar a viagem"""
     conn = get_db()
     viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
     conn.close()
     
     totais = calcular_totais(viagem_id)
     
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Confirmar e Enviar Email", callback_data=f"confirmar_fechar_{viagem_id}"),
-        ],
-        [
-            InlineKeyboardButton("📊 Ver Resumo Primeiro", callback_data=f"ver_resumo_{viagem_id}"),
-            InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
-        ]
-    ]
+    # Salvar viagem_id no contexto para usar nos callbacks
+    context.user_data["fechando_viagem_id"] = viagem_id
+    
+    # Montar teclado com emails pré-definidos
+    keyboard = []
+    for i, item in enumerate(EMAILS_PREDEFINIDOS):
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📧 {item['label']}",
+                callback_data=f"email_fechar_{viagem_id}_{i}"
+            )
+        ])
+    
+    # Opção de digitar outro email
+    keyboard.append([
+        InlineKeyboardButton("✏️ Outro e-mail...", callback_data=f"email_outro_{viagem_id}")
+    ])
+    keyboard.append([
+        InlineKeyboardButton("📊 Ver Resumo Primeiro", callback_data=f"ver_resumo_{viagem_id}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
+    ])
     
     msg = (
-        f"🏁 *Fechar Viagem {viagem['numero_prestacao']}?*\n\n"
+        f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
         f"📍 {viagem['destino']}\n"
         f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
-        f"Ao confirmar:\n"
-        f"✅ A viagem será marcada como concluída\n"
-        f"📧 Email será enviado para o financeiro\n"
-        f"💳 PIX: 063.291.156-56 (Nubank)\n"
-        f"📅 Pagamento: {fmt_data(proximo_dia_15())}"
+        f"📧 *Para qual e-mail enviar o relatório?*"
     )
     
     await update.message.reply_text(
@@ -853,7 +905,7 @@ async def fechar_viagem_handler(update, context, viagem_id):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def executar_fechamento(update, context, viagem_id):
+async def executar_fechamento(update, context, viagem_id, email_destino=None, email_cc_extra=None):
     """Executa o fechamento da viagem e envia email"""
     conn = get_db()
     hoje = date.today().isoformat()
@@ -872,14 +924,16 @@ async def executar_fechamento(update, context, viagem_id):
     totais = calcular_totais(viagem_id)
     
     # Gerar relatório comparativo e enviar ao usuário PRIMEIRO
-    msg = await gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento)
+    email_exibir = email_destino if email_destino else os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
+    email_cc_exibir = email_cc_extra if email_cc_extra else os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
+    msg = await gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, email_exibir, email_cc_exibir)
     await update.effective_message.reply_text(msg, parse_mode="Markdown")
     
     # Enviar email em background (não bloqueia a resposta ao usuário)
     import asyncio
-    asyncio.create_task(enviar_email_relatorio(viagem, itens, totais, data_pagamento))
+    asyncio.create_task(enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=email_destino, email_cc_extra=email_cc_extra))
 
-async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento):
+async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento, email_to=None, email_cc=None):
     """Gera relatório comparativo valores pagos x política"""
     msg = (
         f"🎉 *Viagem Encerrada com Sucesso!*\n\n"
@@ -919,22 +973,27 @@ async def gerar_relatorio_comparativo(viagem, itens, totais, data_pagamento):
     msg += f"Titular: Diogo Machado Santos\n"
     msg += f"Banco: Nubank\n"
     msg += f"📅 *Data: {fmt_data(data_pagamento)}*\n\n"
-    msg += f"📧 Email enviado para o financeiro!\n"
-    msg += f"_hithiara.ferreira@acaifood.com_\n"
-    msg += f"_cópia: diogo.machado@acaifood.com_\n\n"
+    _email_to = email_to or 'hithiara.ferreira@acaifood.com'
+    _email_cc = email_cc or 'diogo.machado@acaifood.com'
+    msg += f"📧 Email enviado para:\n"
+    msg += f"_• {_email_to}_\n"
+    if _email_cc and _email_cc != _email_to:
+        msg += f"_• cópia: {_email_cc}_\n"
+    msg += "\n"
     msg += f"Paz e bem! 🙏"
     
     return msg
 
-async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
+async def enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=None, email_cc_extra=None):
     """Envia email de relatório via API do Brevo (HTTPS - funciona no Railway)"""
     import requests as req_lib
     
     try:
         brevo_api_key = os.environ.get("BREVO_API_KEY", "")
         email_from = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
-        email_to = os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
-        email_cc = os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
+        # Usar email escolhido pelo usuário ou o padrão
+        email_to = email_destino if email_destino else os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
+        email_cc = email_cc_extra if email_cc_extra else os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
         
         if not brevo_api_key:
             logger.error("BREVO_API_KEY não configurado")
@@ -998,10 +1057,12 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
 </html>"""
         
         # Payload para a API do Brevo
+        # Se email_to == email_cc, não duplicar no CC
+        cc_list = [{"email": email_cc}] if email_cc and email_cc != email_to else []
         payload = {
             "sender": {"name": "Açaizinho O Original", "email": email_from},
             "to": [{"email": email_to}],
-            "cc": [{"email": email_cc}],
+            "cc": cc_list,
             "subject": assunto,
             "htmlContent": html_body
         }
@@ -1024,7 +1085,7 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento):
         loop = asyncio.get_event_loop()
         status_code, resp_text = await loop.run_in_executor(None, send_brevo_sync)
         if status_code in [200, 201]:
-            logger.info(f"✅ Email enviado via Brevo para {email_to} (cc: {email_cc})")
+            logger.info(f"✅ Email enviado via Brevo para {email_to}" + (f" (cc: {email_cc})" if email_cc and email_cc != email_to else ""))
         else:
             logger.error(f"❌ Falha ao enviar email via Brevo: {status_code} - {resp_text}")
     except Exception as e:
@@ -1041,11 +1102,99 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data == "cancelar":
         await query.edit_message_text("❌ Operação cancelada.")
+        context.user_data.pop("fechando_viagem_id", None)
+        context.user_data.pop("aguardando_email_viagem_id", None)
     
     elif data.startswith("confirmar_fechar_"):
         viagem_id = int(data.split("_")[-1])
         await query.edit_message_text("⏳ Processando fechamento...")
         await executar_fechamento(update, context, viagem_id)
+    
+    elif data.startswith("email_fechar_"):
+        # Formato: email_fechar_{viagem_id}_{indice_email}
+        partes = data.split("_")
+        viagem_id = int(partes[2])
+        indice = int(partes[3])
+        email_escolhido = EMAILS_PREDEFINIDOS[indice]["email"]
+        label_escolhido = EMAILS_PREDEFINIDOS[indice]["label"]
+        
+        # Mostrar confirmação final com o email escolhido
+        conn = get_db()
+        viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
+        conn.close()
+        totais = calcular_totais(viagem_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Confirmar e Enviar", callback_data=f"confirmar_email_{viagem_id}_{indice}")],
+            [InlineKeyboardButton("🔙 Voltar", callback_data=f"voltar_email_{viagem_id}"),
+             InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")]
+        ]
+        await query.edit_message_text(
+            f"🏁 *Confirmar Fechamento?*\n\n"
+            f"📍 {viagem['destino']}\n"
+            f"💰 *Total: {fmt_brl(totais['total'])}*\n\n"
+            f"📧 *Enviar para:* {label_escolhido}\n"
+            f"✉️ `{email_escolhido}`\n\n"
+            f"💳 PIX: 063.291.156-56 (Nubank)\n"
+            f"📅 Pagamento: {fmt_data(proximo_dia_15())}",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif data.startswith("confirmar_email_"):
+        # Formato: confirmar_email_{viagem_id}_{indice_email}
+        partes = data.split("_")
+        viagem_id = int(partes[2])
+        indice = int(partes[3])
+        email_escolhido = EMAILS_PREDEFINIDOS[indice]["email"]
+        
+        await query.edit_message_text("⏳ Processando fechamento...")
+        await executar_fechamento(update, context, viagem_id, email_destino=email_escolhido)
+    
+    elif data.startswith("email_outro_"):
+        viagem_id = int(data.split("_")[-1])
+        context.user_data["aguardando_email_viagem_id"] = viagem_id
+        await query.edit_message_text(
+            "✏️ *Digite o e-mail para envio do relatório:*\n\n"
+            "_Exemplo: financeiro@empresa.com_",
+            parse_mode="Markdown"
+        )
+    
+    elif data.startswith("confirmar_email_custom_"):
+        viagem_id = int(data.split("_")[-1])
+        email_escolhido = context.user_data.pop("email_customizado", None)
+        context.user_data.pop("viagem_id_email_custom", None)
+        if not email_escolhido:
+            await query.edit_message_text("❌ Erro: e-mail não encontrado. Tente novamente.")
+            return
+        await query.edit_message_text("⏳ Processando fechamento...")
+        await executar_fechamento(update, context, viagem_id, email_destino=email_escolhido)
+    
+    elif data.startswith("voltar_email_"):
+        viagem_id = int(data.split("_")[-1])
+        conn = get_db()
+        viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
+        conn.close()
+        totais = calcular_totais(viagem_id)
+        
+        keyboard = []
+        for i, item in enumerate(EMAILS_PREDEFINIDOS):
+            keyboard.append([
+                InlineKeyboardButton(f"📧 {item['label']}", callback_data=f"email_fechar_{viagem_id}_{i}")
+            ])
+        keyboard.append([InlineKeyboardButton("✏️ Outro e-mail...", callback_data=f"email_outro_{viagem_id}")])
+        keyboard.append([
+            InlineKeyboardButton("📊 Ver Resumo Primeiro", callback_data=f"ver_resumo_{viagem_id}"),
+            InlineKeyboardButton("❌ Cancelar", callback_data="cancelar")
+        ])
+        await query.edit_message_text(
+            f"🏁 *Fechar Viagem {viagem['numero_prestacao']}*\n\n"
+            f"📍 {viagem['destino']}\n"
+            f"💰 *Total a reembolsar: {fmt_brl(totais['total'])}*\n\n"
+            f"📧 *Para qual e-mail enviar o relatório?*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     elif data.startswith("ver_resumo_"):
         viagem_id = int(data.split("_")[-1])
