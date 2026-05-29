@@ -1167,18 +1167,18 @@ async def enviar_email_para_lista(viagem, itens, totais, data_pagamento, emails_
         await enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=email)
 
 async def enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_destino=None, email_cc_extra=None):
-    """Envia email de relatório via API do Brevo (HTTPS - funciona no Railway)"""
+    """Envia email de relatório via API do SendGrid (HTTPS - sem restrição de IP)"""
     import requests as req_lib
     
     try:
-        brevo_api_key = os.environ.get("BREVO_API_KEY", "")
+        sendgrid_api_key = os.environ.get("SENDGRID_API_KEY", "")
         email_from = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
         # Usar email escolhido pelo usuário ou o padrão
         email_to = email_destino if email_destino else os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
         email_cc = email_cc_extra if email_cc_extra else os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
         
-        if not brevo_api_key:
-            logger.error("BREVO_API_KEY não configurado")
+        if not sendgrid_api_key:
+            logger.error("SENDGRID_API_KEY não configurado")
             return
         
         v = dict(viagem)
@@ -1238,38 +1238,39 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_de
 </body>
 </html>"""
         
-        # Payload para a API do Brevo
+        # Payload para a API do SendGrid
         # Se email_to == email_cc, não duplicar no CC
-        cc_list = [{"email": email_cc}] if email_cc and email_cc != email_to else []
+        personalizations = [{"to": [{"email": email_to}]}]
+        if email_cc and email_cc != email_to:
+            personalizations[0]["cc"] = [{"email": email_cc}]
+        
         payload = {
-            "sender": {"name": "Açaizinho O Original", "email": email_from},
-            "to": [{"email": email_to}],
-            "cc": cc_list,
+            "personalizations": personalizations,
+            "from": {"email": email_from, "name": "Açaizinho O Original"},
             "subject": assunto,
-            "htmlContent": html_body
+            "content": [{"type": "text/html", "value": html_body}]
         }
         
-        headers_brevo = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "api-key": brevo_api_key
+        headers_sg = {
+            "Authorization": f"Bearer {sendgrid_api_key}",
+            "Content-Type": "application/json"
         }
         
-        def send_brevo_sync():
+        def send_sendgrid_sync():
             r = req_lib.post(
-                "https://api.brevo.com/v3/smtp/email",
+                "https://api.sendgrid.com/v3/mail/send",
                 json=payload,
-                headers=headers_brevo,
+                headers=headers_sg,
                 timeout=30
             )
             return r.status_code, r.text
         
         loop = asyncio.get_event_loop()
-        status_code, resp_text = await loop.run_in_executor(None, send_brevo_sync)
-        if status_code in [200, 201]:
-            logger.info(f"✅ Email enviado via Brevo para {email_to}" + (f" (cc: {email_cc})" if email_cc and email_cc != email_to else ""))
+        status_code, resp_text = await loop.run_in_executor(None, send_sendgrid_sync)
+        if status_code in [200, 201, 202]:
+            logger.info(f"✅ Email enviado via SendGrid para {email_to}" + (f" (cc: {email_cc})" if email_cc and email_cc != email_to else ""))
         else:
-            logger.error(f"❌ Falha ao enviar email via Brevo: {status_code} - {resp_text}")
+            logger.error(f"❌ Falha ao enviar email via SendGrid: {status_code} - {resp_text}")
     except Exception as e:
         logger.error(f"Erro ao enviar email: {e}")
 
