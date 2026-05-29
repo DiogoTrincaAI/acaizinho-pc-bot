@@ -467,6 +467,77 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Fechamento cancelado. Continue lançando despesas!")
         return
     
+    # Aguardando noites de hospedagem (pergunta proativa ao fechar)?
+    if context.user_data.get("aguardando_hosp_viagem_id"):
+        viagem_id = context.user_data.pop("aguardando_hosp_viagem_id")
+        pedir_km_depois = context.user_data.pop("aguardando_km_apos_hosp", False)
+        import re
+        numeros = re.findall(r'\d+(?:[.,]\d+)?', texto)
+        if numeros:
+            noites = float(numeros[0].replace(',', '.'))
+            valor_politica = noites * 500.0
+            conn = get_db()
+            conn.execute(
+                "INSERT INTO itens (viagem_id, tipo, descricao, quantidade, valor_pago, valor_politica, criado_em) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
+                (viagem_id, "hospedagem", f"Hospedagem ({int(noites)} noite{'s' if noites != 1 else ''})", noites, valor_politica, valor_politica)
+            )
+            conn.commit()
+            conn.close()
+            await update.message.reply_text(
+                f"✅ *Hospedagem registrada!*\n"
+                f"🏨 {int(noites)} noite{'s' if noites != 1 else ''} × R$ 500,00 = *{fmt_brl(valor_politica)}*",
+                parse_mode="Markdown"
+            )
+            if pedir_km_depois:
+                # Agora pedir os km
+                context.user_data["aguardando_km_viagem_id"] = viagem_id
+                await update.message.reply_text(
+                    "🚗 *Quantos km rodou?*\n\nEx: _150 km_, _200_, ou apenas _150_\n\n_(Valor: R$ 1,60/km conforme política)_",
+                    parse_mode="Markdown"
+                )
+            else:
+                # Ir para seleção de e-mail
+                await _mostrar_tela_emails(update, context, viagem_id)
+        else:
+            await update.message.reply_text(
+                "❌ Não entendi a quantidade. Por favor, informe apenas o número de noites.\nEx: _2_ ou _2 noites_",
+                parse_mode="Markdown"
+            )
+            context.user_data["aguardando_hosp_viagem_id"] = viagem_id  # mantém aguardando
+            if pedir_km_depois:
+                context.user_data["aguardando_km_apos_hosp"] = True
+        return
+    
+    # Aguardando km rodados (pergunta proativa ao fechar)?
+    if context.user_data.get("aguardando_km_viagem_id"):
+        viagem_id = context.user_data.pop("aguardando_km_viagem_id")
+        import re
+        numeros = re.findall(r'\d+(?:[.,]\d+)?', texto)
+        if numeros:
+            km = float(numeros[0].replace(',', '.'))
+            valor_politica = km * 1.60
+            conn = get_db()
+            conn.execute(
+                "INSERT INTO itens (viagem_id, tipo, descricao, quantidade, valor_pago, valor_politica, criado_em) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
+                (viagem_id, "km", f"Quilometragem ({km:.0f} km)", km, valor_politica, valor_politica)
+            )
+            conn.commit()
+            conn.close()
+            await update.message.reply_text(
+                f"✅ *Quilometragem registrada!*\n"
+                f"🚗 {km:.0f} km × R$ 1,60 = *{fmt_brl(valor_politica)}*",
+                parse_mode="Markdown"
+            )
+            # Ir para seleção de e-mail
+            await _mostrar_tela_emails(update, context, viagem_id)
+        else:
+            await update.message.reply_text(
+                "❌ Não entendi a quantidade. Por favor, informe apenas o número de km.\nEx: _150_ ou _150 km_",
+                parse_mode="Markdown"
+            )
+            context.user_data["aguardando_km_viagem_id"] = viagem_id  # mantém aguardando
+        return
+    
     # Processar com IA
     await update.message.chat.send_action("typing")
     dados = await interpretar_mensagem(texto)
@@ -912,16 +983,76 @@ def _texto_emails_selecionados(selecionados: list, email_extra: str = "") -> str
     return "\n".join(f"• `{e}`" for e in emails)
 
 async def fechar_viagem_handler(update, context, viagem_id):
-    """Mostra tela de seleção de e-mails com toggle antes de fechar a viagem"""
+    """Verifica itens pendentes (hospedagem/km) antes de mostrar seleção de e-mails"""
     conn = get_db()
     viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
     conn.close()
     
     totais = calcular_totais(viagem_id)
     
+    # Verificar se hospedagem e km foram registrados
+    sem_hospedagem = totais["hospedagem"] == 0
+    sem_km = totais["km"] == 0
+    
+    if sem_hospedagem or sem_km:
+        # Montar mensagem de alerta com itens faltantes
+        itens_faltando = []
+        if sem_hospedagem:
+            itens_faltando.append("🏨 *Hospedagem* — Houve pernoite nessa viagem?")
+        if sem_km:
+            itens_faltando.append("🚗 *Quilometragem* — Usou veículo próprio?")
+        
+        alerta = "\n".join(itens_faltando)
+        msg = (
+            f"⚠️ *Antes de fechar, verifique:*\n\n"
+            f"Não foram registrados:\n"
+            f"{alerta}\n\n"
+            f"Deseja adicionar algum desses itens antes de fechar?"
+        )
+        
+        # Montar botões dinâmicos conforme o que está faltando
+        keyboard = []
+        if sem_hospedagem:
+            keyboard.append([InlineKeyboardButton(
+                "🏨 Sim, houve hospedagem",
+                callback_data=f"perg_hosp_{viagem_id}"
+            )])
+        if sem_km:
+            keyboard.append([InlineKeyboardButton(
+                "🚗 Sim, rodei quilômetros",
+                callback_data=f"perg_km_{viagem_id}"
+            )])
+        if sem_hospedagem and sem_km:
+            keyboard.append([InlineKeyboardButton(
+                "✅ Ambos (hospedagem + km)",
+                callback_data=f"perg_ambos_{viagem_id}"
+            )])
+        keyboard.append([InlineKeyboardButton(
+            "❌ Não, pode fechar assim",
+            callback_data=f"ir_emails_{viagem_id}"
+        )])
+        
+        await update.message.reply_text(
+            msg,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Todos os itens registrados — ir direto para seleção de e-mail
+        await _mostrar_tela_emails(update, context, viagem_id, viagem, totais)
+
+async def _mostrar_tela_emails(update_or_query, context, viagem_id, viagem=None, totais=None, editar=False):
+    """Mostra a tela de seleção de e-mails (pode ser chamada de update.message ou callback)"""
+    if viagem is None:
+        conn = get_db()
+        viagem = conn.execute("SELECT * FROM viagens WHERE id = ?", (viagem_id,)).fetchone()
+        conn.close()
+    if totais is None:
+        totais = calcular_totais(viagem_id)
+    
     # Inicializar estado: nenhum selecionado por padrão
-    context.user_data[f"esel_{viagem_id}"] = []       # indices selecionados
-    context.user_data[f"eextra_{viagem_id}"] = ""     # email extra digitado
+    context.user_data[f"esel_{viagem_id}"] = []
+    context.user_data[f"eextra_{viagem_id}"] = ""
     
     keyboard = _montar_teclado_emails(viagem_id, [], "")
     
@@ -933,11 +1064,19 @@ async def fechar_viagem_handler(update, context, viagem_id):
         f"_(toque para marcar ✅ ou desmarcar ☐)_"
     )
     
-    await update.message.reply_text(
-        msg,
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    if editar and hasattr(update_or_query, 'edit_message_text'):
+        await update_or_query.edit_message_text(
+            msg,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        msg_obj = getattr(update_or_query, 'message', None) or getattr(update_or_query, 'effective_message', None)
+        await msg_obj.reply_text(
+            msg,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 async def executar_fechamento(update, context, viagem_id, email_destino=None, email_cc_extra=None, lista_emails=None):
     """Executa o fechamento da viagem e envia email"""
@@ -1258,6 +1397,47 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto_pendente = context.user_data.pop("nova_viagem_pendente", None)
         if texto_pendente:
             await abrir_viagem_direto(update, context, texto_pendente)
+    
+    elif data.startswith("ir_emails_"):
+        # Usuário confirmou que não precisa de hospedagem/km — ir para seleção de e-mail
+        viagem_id = int(data.split("_")[-1])
+        await _mostrar_tela_emails(query, context, viagem_id, editar=True)
+    
+    elif data.startswith("perg_hosp_"):
+        # Usuário confirma que houve hospedagem — pedir quantidade de noites
+        viagem_id = int(data.split("_")[-1])
+        context.user_data["aguardando_hosp_viagem_id"] = viagem_id
+        context.user_data.pop("aguardando_km_viagem_id", None)
+        await query.edit_message_text(
+            "🏨 *Quantas noites de hospedagem?*\n\n"
+            "Ex: _1 noite_, _2 noites_, ou apenas _2_\n\n"
+            "_(Valor: R$ 500,00/noite conforme política)_",
+            parse_mode="Markdown"
+        )
+    
+    elif data.startswith("perg_km_"):
+        # Usuário confirma que rodou km — pedir quantidade
+        viagem_id = int(data.split("_")[-1])
+        context.user_data["aguardando_km_viagem_id"] = viagem_id
+        context.user_data.pop("aguardando_hosp_viagem_id", None)
+        await query.edit_message_text(
+            "🚗 *Quantos km rodou?*\n\n"
+            "Ex: _150 km_, _200_, ou apenas _150_\n\n"
+            "_(Valor: R$ 1,60/km conforme política)_",
+            parse_mode="Markdown"
+        )
+    
+    elif data.startswith("perg_ambos_"):
+        # Usuário confirma que houve hospedagem E km — pedir hospedagem primeiro
+        viagem_id = int(data.split("_")[-1])
+        context.user_data["aguardando_hosp_viagem_id"] = viagem_id
+        context.user_data["aguardando_km_apos_hosp"] = True  # flag para pedir km depois
+        await query.edit_message_text(
+            "🏨 *Quantas noites de hospedagem?*\n\n"
+            "Ex: _1 noite_, _2 noites_, ou apenas _2_\n\n"
+            "_(Após isso perguntarei os km)_",
+            parse_mode="Markdown"
+        )
 
 # ==================== MAIN ====================
 
