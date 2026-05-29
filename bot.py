@@ -1172,7 +1172,7 @@ async def enviar_email_relatorio(viagem, itens, totais, data_pagamento, email_de
     
     try:
         sendgrid_api_key = os.environ.get("SENDGRID_API_KEY", "")
-        email_from = os.environ.get("SMTP_EMAIL", "diogomachadogv@gmail.com")
+        email_from = os.environ.get("EMAIL_REMETENTE", "diogo.machado@acaifood.com")
         # Usar email escolhido pelo usuário ou o padrão
         email_to = email_destino if email_destino else os.environ.get("EMAIL_FINANCEIRO", "hithiara.ferreira@acaifood.com")
         email_cc = email_cc_extra if email_cc_extra else os.environ.get("EMAIL_CC", "diogo.machado@acaifood.com")
